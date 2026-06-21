@@ -1,24 +1,59 @@
 {
   "expo": {
-    "name": "bolt-expo-nativewind",
+    "name": "CoachingSolo",
     "slug": "bolt-expo-nativewind",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "icon": "./assets/images/solo_logo-removebg-preview.png",
+    "scheme": "coachingsolo",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/solo_logo-removebg-preview.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#050014"
+    },
+    "android": {
+      "package": "io.coachingsolo.app",
+      "versionCode": 2,
+      "minSdkVersion": 24,
+      "targetSdkVersion": 34,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/solo_logo-removebg-preview.png",
+        "backgroundColor": "#050014"
+      },
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.VIBRATE",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "io.coachingsolo.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "We need microphone access to record your workout descriptions using voice input."
+      }
     },
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/solo_logo-removebg-preview.png"
     },
-    "plugins": ["expo-router", "expo-font", "expo-web-browser"],
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-web-browser"
+    ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "b87ede13-2a3f-40d6-b5c4-c59b295447ed"
+      },
+      "router": {}
+    },
+    "owner": "coachingsolo"
   }
 }
