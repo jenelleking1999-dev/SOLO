@@ -5,7 +5,9 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronRight, ArrowLeft } from 'lucide-react-native';
@@ -75,15 +77,18 @@ export default function SessionScreen() {
   const init = async () => {
     setLoading(true);
 
-    const [{ data: workoutData }, { data: sessionData }] = await Promise.all([
+    const [{ data: workoutData, error: workoutError }, { data: sessionData, error: sessionError }] = await Promise.all([
       supabase.from('workouts').select('*').eq('id', workoutId).single(),
       supabase.from('sessions').select('*').eq('id', sessionId).single(),
     ]);
 
-    if (!workoutData || !sessionData) return;
+    if (workoutError || sessionError || !workoutData || !sessionData) {
+      Alert.alert('Error', 'Failed to load session. Please try again.');
+      goBack();
+      return;
+    }
 
     if (sessionData.user_id && user && sessionData.user_id !== user.id) {
-      console.error('SECURITY BLOCK: Unauthorized session access — user', user.id, 'attempted to access session owned by', sessionData.user_id);
       goBack();
       return;
     }
@@ -242,12 +247,6 @@ export default function SessionScreen() {
     const currentRepIndex = updatedGroup.current_rep - 1;
     const currentGroupIndex = groups.findIndex((g) => g.id === updatedGroup.id);
 
-    console.log("INPUT RECORDED", {
-      currentRepIndex,
-      currentGroupIndex,
-      currentSegmentIndex,
-    });
-    console.log("CHECKING FINAL INPUT");
 
     const otherGroupsDone = groups.every(
       (g) =>
@@ -415,21 +414,6 @@ export default function SessionScreen() {
     };
   }, [workout, groups, pendingAssignments, currentSegmentIndex, allSplits]);
 
-  useEffect(() => {
-    console.log('Workout Completion Check:', {
-      allRepsCompleted,
-      allGroupsCompleted,
-      allSegmentsCompleted,
-      allSplitsEntered,
-      isWorkoutComplete,
-    });
-  }, [
-    allRepsCompleted,
-    allGroupsCompleted,
-    allSegmentsCompleted,
-    allSplitsEntered,
-    isWorkoutComplete,
-  ]);
 
   useEffect(() => {
     setHasCompleted(false);
@@ -439,7 +423,6 @@ export default function SessionScreen() {
     if (!isWorkoutComplete) return;
     if (hasCompleted) return;
 
-    console.log("🚀 WORKOUT COMPLETION TRIGGERED");
 
     setHasCompleted(true);
 
@@ -448,7 +431,6 @@ export default function SessionScreen() {
 
   const handleWorkoutCompletion = async () => {
     try {
-      console.log("💾 Saving completed workout...");
 
       const completedAt = new Date().toISOString();
       const { data: savedWorkout, error } = await supabase
@@ -464,7 +446,6 @@ export default function SessionScreen() {
       if (error) throw error;
       if (!savedWorkout) throw new Error('No session returned after save');
 
-      console.log("✅ Workout saved with ID:", savedWorkout.id);
 
       router.replace({
         pathname: '/results',
@@ -474,8 +455,7 @@ export default function SessionScreen() {
           refreshKey: String(Date.now()),
         },
       });
-    } catch (error) {
-      console.error("❌ Completion error:", error);
+    } catch {
       setHasCompleted(false);
     }
   };

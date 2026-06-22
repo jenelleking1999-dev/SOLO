@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   ScrollView,
   Image,
   Platform,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -17,6 +18,9 @@ import { parseWorkoutText, ParsedWorkout } from '@/utils/workoutParser';
 import { WorkoutSegment } from '@/types/database';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useVoiceWorkout } from '@/hooks/useVoiceWorkout';
+import { VoiceInputButton } from '@/components/VoiceInputButton';
+import { VoiceFeedback } from '@/components/VoiceFeedback';
 
 export default function HomeScreen() {
   const [workoutText, setWorkoutText] = useState('');
@@ -27,6 +31,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const parsedWorkoutRef = useRef<ParsedWorkout | null>(null);
+  const voiceInput = useVoiceWorkout();
 
   const handleParseWorkout = () => {
     if (!workoutText.trim()) return;
@@ -73,6 +78,16 @@ export default function HomeScreen() {
     setParsedWorkout(null);
     setEditedWorkout(null);
     setIsEditing(false);
+  };
+
+  const handleVoiceTranscriptAccept = (transcript: string) => {
+    setWorkoutText(transcript);
+    voiceInput.resetTranscript();
+    Alert.alert('Workout Added', 'Tap "Generate Workout" to parse your workout description.');
+  };
+
+  const handleVoiceTranscriptClear = () => {
+    voiceInput.resetTranscript();
   };
 
   const updateSegment = (index: number, field: keyof WorkoutSegment, value: string) => {
@@ -171,14 +186,31 @@ export default function HomeScreen() {
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
-            placeholder="Type a workout..."
+            placeholder="Type a workout or use voice..."
             placeholderTextColor={colors.dark.textSecondary}
             value={workoutText}
             onChangeText={setWorkoutText}
             multiline
             onSubmitEditing={handleParseWorkout}
           />
+          {voiceInput.voiceAvailable && (
+            <VoiceInputButton
+              isRecording={voiceInput.isRecording}
+              isProcessing={voiceInput.isProcessing}
+              onPress={voiceInput.toggleRecording}
+            />
+          )}
         </View>
+
+        {voiceInput.voiceAvailable && (voiceInput.transcript || voiceInput.error) && (
+          <VoiceFeedback
+            transcript={voiceInput.transcript}
+            error={voiceInput.error}
+            isRecording={voiceInput.isRecording}
+            onTranscriptAccept={handleVoiceTranscriptAccept}
+            onTranscriptClear={handleVoiceTranscriptClear}
+          />
+        )}
 
         {workoutText && !parsedWorkout && (
           <TouchableOpacity style={styles.parseButton} onPress={handleParseWorkout}>

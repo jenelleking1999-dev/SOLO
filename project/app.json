@@ -43,7 +43,16 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-audio",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow SOLO to use the microphone to capture athlete names and workout descriptions.",
+          "speechRecognitionPermission": "Allow SOLO to use speech recognition to transcribe athlete names and workouts.",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

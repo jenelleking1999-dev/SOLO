@@ -7,6 +7,8 @@ import {
   StyleSheet,
   Vibration,
   Platform,
+  Alert,
+  ScrollView,
 } from 'react-native';
 import { Play, Pause, Flag, ChevronDown, ChevronUp, Timer } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,6 +16,8 @@ import { colors, spacing, typography } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { formatTime } from '@/utils/workoutParser';
 import { Split, Group } from '@/types/database';
+import { useContinuousVoiceAthletes } from '@/hooks/useContinuousVoiceAthletes';
+import { VoiceAthleteCapture } from '@/components/VoiceAthleteCapture';
 
 interface GroupStopwatchProps {
   group: Group;
@@ -48,10 +52,13 @@ export function GroupStopwatch({
   const [elapsedTime, setElapsedTime] = useState(0);
   const [splits, setSplits] = useState<Split[]>([]);
   const [restRemaining, setRestRemaining] = useState<number>(0);
+  const [showVoiceCapture, setShowVoiceCapture] = useState(false);
 
   const startTimeRef = useRef<number>(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const voiceAthletes = useContinuousVoiceAthletes(elapsedTime, group.athlete_names || []);
 
   const isComplete = group.current_rep > totalReps;
 
@@ -79,6 +86,11 @@ export function GroupStopwatch({
     setIsRunning(false);
     setElapsedTime(0);
     setSplits([]);
+    setShowVoiceCapture(false);
+    voiceAthletes.clearRecognizedAthletes();
+    if (voiceAthletes.isListening) {
+      voiceAthletes.stopListening();
+    }
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -132,16 +144,18 @@ export function GroupStopwatch({
 
   const handlePause = async () => {
     setIsRunning(false);
+    if (voiceAthletes.isListening) {
+      await voiceAthletes.stopListening();
+    }
     await supabase.from('groups').update({ is_active: false }).eq('id', group.id);
     onGroupUpdated({ ...group, is_active: false });
   };
 
   const handleTap = async () => {
-    console.log("🔥 REAL WORKOUT INPUT HANDLER TRIGGERED");
     if (!isRunning) return;
     if (Platform.OS !== 'web') Vibration.vibrate(50);
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('splits')
       .insert({
         session_id: sessionId,
@@ -156,14 +170,81 @@ export function GroupStopwatch({
       .select()
       .single();
 
+    if (error) {
+      Alert.alert('Error', 'Failed to record split. Please try again.');
+      return;
+    }
+
     if (data) {
       setSplits((prev) => [...prev, data]);
+    }
+  };
+
+  const handleVoiceAthletesConfirm = async (recognizedAthletes: any[]) => {
+    if (recognizedAthletes.length === 0) return;
+
+    if (Platform.OS !== 'web') {
+      Vibration.vibrate([0, 50, 30, 50]);
+    }
+
+    try {
+      // Collect new athlete names
+      const newAthletes = recognizedAthletes
+        .map((a) => a.name)
+        .filter((name) => !group.athlete_names?.some((existing) => existing.toLowerCase() === name.toLowerCase()));
+
+      // Update group roster with any new athletes
+      if (newAthletes.length > 0) {
+        const updatedRoster = [...(group.athlete_names || []), ...newAthletes];
+        await supabase
+          .from('groups')
+          .update({ athlete_names: updatedRoster })
+          .eq('id', group.id);
+
+        onGroupUpdated({ ...group, athlete_names: updatedRoster });
+      }
+
+      // Create splits for all recognized athletes
+      const splitInserts = recognizedAthletes.map((athlete) => ({
+        session_id: sessionId,
+        rep_number: group.current_rep,
+        time_ms: athlete.splitTime,
+        athlete_name: athlete.name,
+        group_number: group.group_index + 1,
+        group_id: group.id,
+        segment_index: segmentIndex,
+        timestamp: new Date().toISOString(),
+      }));
+
+      const { data: newSplits, error } = await supabase
+        .from('splits')
+        .insert(splitInserts as any)
+        .select();
+
+      if (error) {
+        Alert.alert('Error', 'Failed to record athletes. Please try again.');
+        return;
+      }
+
+      if (newSplits && newSplits.length > 0) {
+        setSplits((prev) => [...prev, ...newSplits]);
+      }
+
+      voiceAthletes.clearRecognizedAthletes();
+      setShowVoiceCapture(false);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to process voice athletes.');
     }
   };
 
   const handleFinishRep = async () => {
     if (Platform.OS !== 'web') Vibration.vibrate([0, 80, 40, 80]);
     setIsRunning(false);
+    setShowVoiceCapture(false);
+    if (voiceAthletes.isListening) {
+      await voiceAthletes.stopListening();
+    }
+
     await supabase.from('groups').update({ is_active: false }).eq('id', group.id);
     onGroupUpdated({ ...group, is_active: false });
 
@@ -291,6 +372,21 @@ export function GroupStopwatch({
             ))}
           </View>}
 
+          {isRunning && showVoiceCapture && (
+            <VoiceAthleteCapture
+              isListening={voiceAthletes.isListening}
+              isProcessing={voiceAthletes.isProcessing}
+              recognizedAthletes={voiceAthletes.recognizedAthletes}
+              currentTranscript={voiceAthletes.currentTranscript}
+              error={voiceAthletes.error}
+              onToggleListening={voiceAthletes.toggleListening}
+              onRemoveAthlete={voiceAthletes.removeAthlete}
+              onClearAll={voiceAthletes.clearRecognizedAthletes}
+              onConfirm={handleVoiceAthletesConfirm}
+              existingAthletes={group.athlete_names || []}
+            />
+          )}
+
           {!isComplete && <View style={styles.controls}>
             {!isRunning ? (
               <TouchableOpacity
@@ -315,6 +411,20 @@ export function GroupStopwatch({
                 <TouchableOpacity style={styles.pauseBtn} onPress={handlePause}>
                   <Pause size={20} color={colors.dark.text} />
                 </TouchableOpacity>
+
+                {voiceAthletes.voiceAvailable && (
+                  <TouchableOpacity
+                    style={[
+                      styles.voiceToggleBtn,
+                      showVoiceCapture && styles.voiceToggleBtnActive,
+                    ]}
+                    onPress={() => setShowVoiceCapture(!showVoiceCapture)}
+                  >
+                    <Text style={styles.voiceToggleBtnText}>
+                      {showVoiceCapture ? '🎙️ Voice On' : '🎙️ Add Voice'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
                 {hasEnoughSplits && (
                   <TouchableOpacity
@@ -604,5 +714,28 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     fontWeight: typography.fontWeight.bold,
     color: colors.dark.error,
+  },
+  voiceToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: 'rgba(168, 85, 247, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.5)',
+    borderRadius: 10,
+  },
+  voiceToggleBtnActive: {
+    backgroundColor: 'rgba(168, 85, 247, 0.2)',
+    borderColor: colors.dark.secondary,
+  },
+  voiceToggleBtnText: {
+    fontSize: typography.fontSize.sm,
+    fontFamily: typography.fontFamily.semibold,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.dark.secondary,
   },
 });
