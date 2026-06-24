@@ -84,7 +84,14 @@ export function useVoiceWorkout() {
     const subs = [
       SpeechRecognition.addListener('start', () => {
         if (isMountedRef.current) {
-          setState((prev) => ({ ...prev, isRecording: true, error: null }));
+          // Clear isProcessing here so the mic button becomes tappable again
+          // (it is disabled while processing) — otherwise the user can't stop.
+          setState((prev) => ({
+            ...prev,
+            isRecording: true,
+            isProcessing: false,
+            error: null,
+          }));
         }
       }),
       SpeechRecognition.addListener('end', () => {
@@ -190,6 +197,12 @@ export function useVoiceWorkout() {
       // the mic again (which calls stop() and finalizes the transcript).
       wantListeningRef.current = true;
       beginRecognition();
+      // Optimistically mark as recording and clear processing so the mic
+      // button is immediately tappable to stop, even if the native `start`
+      // event is delayed or doesn't fire (e.g. on web).
+      if (isMountedRef.current) {
+        setState((prev) => ({ ...prev, isRecording: true, isProcessing: false }));
+      }
     } catch (error: any) {
       wantListeningRef.current = false;
       setState((prev) => ({
