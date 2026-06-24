@@ -17,7 +17,10 @@ import { supabase } from '@/lib/supabase';
 import { formatTime } from '@/utils/workoutParser';
 import { Split, Group } from '@/types/database';
 import { useContinuousVoiceAthletes } from '@/hooks/useContinuousVoiceAthletes';
-import { VoiceAthleteCapture } from '@/components/VoiceAthleteCapture';
+
+// How long (ms) an unpaired tap waits for a spoken name, and vice-versa.
+// Covers the lag between tapping and the recognizer finalizing the name.
+const PAIR_WINDOW_MS = 4000;
 
 interface GroupStopwatchProps {
   group: Group;
@@ -58,7 +61,72 @@ export function GroupStopwatch({
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const voiceAthletes = useContinuousVoiceAthletes(elapsedTime, group.athlete_names || []);
+  // --- Voice <-> tap pairing -------------------------------------------------
+  // A tap captures the precise split time; the athlete's name is called out
+  // during/just after the tap. We buffer unpaired taps and names for a short
+  // window and match them in order, so each split is auto-assigned to the right
+  // athlete without the coach reassigning afterwards.
+  const pendingTapsRef = useRef<{ id: string; tappedAt: number }[]>([]);
+  const pendingNamesRef = useRef<{ name: string; heardAt: number }[]>([]);
+  const rosterRef = useRef<string[]>(group.athlete_names || []);
+
+  useEffect(() => {
+    rosterRef.current = group.athlete_names || [];
+  }, [group.athlete_names]);
+
+  const assignNameToSplit = async (splitId: string, rawName: string) => {
+    const roster = rosterRef.current;
+    const existing = roster.find(
+      (a) => a.toLowerCase() === rawName.toLowerCase()
+    );
+    const name = existing || rawName;
+
+    // Reflect the assignment in the UI immediately.
+    setSplits((prev) =>
+      prev.map((s) => (s.id === splitId ? { ...s, athlete_name: name } : s))
+    );
+    if (Platform.OS !== 'web') Vibration.vibrate(30);
+
+    await supabase
+      .from('splits')
+      .update({ athlete_name: name } as any)
+      .eq('id', splitId);
+
+    // First time we hear this athlete -> add to the group's roster so future
+    // reps recognize them automatically.
+    if (!existing) {
+      const updatedRoster = [...roster, name];
+      rosterRef.current = updatedRoster;
+      await supabase
+        .from('groups')
+        .update({ athlete_names: updatedRoster } as any)
+        .eq('id', group.id);
+      onGroupUpdated({ ...group, athlete_names: updatedRoster });
+    }
+  };
+
+  const handleNameRecognized = (name: string) => {
+    const now = Date.now();
+    pendingTapsRef.current = pendingTapsRef.current.filter(
+      (t) => now - t.tappedAt <= PAIR_WINDOW_MS
+    );
+    if (pendingTapsRef.current.length > 0) {
+      // Pair with the earliest unpaired tap (preserves the order called out).
+      const tap = pendingTapsRef.current.shift()!;
+      assignNameToSplit(tap.id, name);
+    } else {
+      // Name arrived before its tap — hold it briefly for the next tap.
+      pendingNamesRef.current = pendingNamesRef.current.filter(
+        (n) => now - n.heardAt <= PAIR_WINDOW_MS
+      );
+      pendingNamesRef.current.push({ name, heardAt: now });
+    }
+  };
+
+  const voiceAthletes = useContinuousVoiceAthletes({
+    existingAthletes: group.athlete_names || [],
+    onNameRecognized: handleNameRecognized,
+  });
 
   const isComplete = group.current_rep > totalReps;
 
@@ -87,7 +155,8 @@ export function GroupStopwatch({
     setElapsedTime(0);
     setSplits([]);
     setShowVoiceCapture(false);
-    voiceAthletes.clearRecognizedAthletes();
+    pendingTapsRef.current = [];
+    pendingNamesRef.current = [];
     if (voiceAthletes.isListening) {
       voiceAthletes.stopListening();
     }
@@ -155,12 +224,16 @@ export function GroupStopwatch({
     if (!isRunning) return;
     if (Platform.OS !== 'web') Vibration.vibrate(50);
 
+    // Capture the precise stopwatch time at the moment of the tap.
+    const tappedAt = Date.now();
+    const tappedElapsed = elapsedTime;
+
     const { data, error } = await supabase
       .from('splits')
       .insert({
         session_id: sessionId,
         rep_number: group.current_rep,
-        time_ms: elapsedTime,
+        time_ms: tappedElapsed,
         athlete_name: null,
         group_number: group.group_index + 1,
         group_id: group.id,
@@ -174,66 +247,37 @@ export function GroupStopwatch({
       Alert.alert('Error', 'Failed to record split. Please try again.');
       return;
     }
+    if (!data) return;
+    const split = data as any;
 
-    if (data) {
-      setSplits((prev) => [...prev, data]);
+    setSplits((prev) => [...prev, split]);
+
+    // Pair the tapped split with a called-out athlete name.
+    if (voiceAthletes.isListening) {
+      const now = Date.now();
+      pendingNamesRef.current = pendingNamesRef.current.filter(
+        (n) => now - n.heardAt <= PAIR_WINDOW_MS
+      );
+      const heard = pendingNamesRef.current.shift();
+      if (heard) {
+        // A name was already spoken during/just before this tap.
+        assignNameToSplit(split.id, heard.name);
+      } else {
+        // Wait for the name called out immediately after the tap.
+        pendingTapsRef.current.push({ id: split.id, tappedAt });
+      }
     }
   };
 
-  const handleVoiceAthletesConfirm = async (recognizedAthletes: any[]) => {
-    if (recognizedAthletes.length === 0) return;
-
-    if (Platform.OS !== 'web') {
-      Vibration.vibrate([0, 50, 30, 50]);
-    }
-
-    try {
-      // Collect new athlete names
-      const newAthletes = recognizedAthletes
-        .map((a) => a.name)
-        .filter((name) => !group.athlete_names?.some((existing) => existing.toLowerCase() === name.toLowerCase()));
-
-      // Update group roster with any new athletes
-      if (newAthletes.length > 0) {
-        const updatedRoster = [...(group.athlete_names || []), ...newAthletes];
-        await supabase
-          .from('groups')
-          .update({ athlete_names: updatedRoster })
-          .eq('id', group.id);
-
-        onGroupUpdated({ ...group, athlete_names: updatedRoster });
-      }
-
-      // Create splits for all recognized athletes
-      const splitInserts = recognizedAthletes.map((athlete) => ({
-        session_id: sessionId,
-        rep_number: group.current_rep,
-        time_ms: athlete.splitTime,
-        athlete_name: athlete.name,
-        group_number: group.group_index + 1,
-        group_id: group.id,
-        segment_index: segmentIndex,
-        timestamp: new Date().toISOString(),
-      }));
-
-      const { data: newSplits, error } = await supabase
-        .from('splits')
-        .insert(splitInserts as any)
-        .select();
-
-      if (error) {
-        Alert.alert('Error', 'Failed to record athletes. Please try again.');
-        return;
-      }
-
-      if (newSplits && newSplits.length > 0) {
-        setSplits((prev) => [...prev, ...newSplits]);
-      }
-
-      voiceAthletes.clearRecognizedAthletes();
+  const toggleVoice = async () => {
+    if (showVoiceCapture) {
       setShowVoiceCapture(false);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to process voice athletes.');
+      pendingTapsRef.current = [];
+      pendingNamesRef.current = [];
+      if (voiceAthletes.isListening) await voiceAthletes.stopListening();
+    } else {
+      setShowVoiceCapture(true);
+      await voiceAthletes.startListening();
     }
   };
 
@@ -241,6 +285,8 @@ export function GroupStopwatch({
     if (Platform.OS !== 'web') Vibration.vibrate([0, 80, 40, 80]);
     setIsRunning(false);
     setShowVoiceCapture(false);
+    pendingTapsRef.current = [];
+    pendingNamesRef.current = [];
     if (voiceAthletes.isListening) {
       await voiceAthletes.stopListening();
     }
@@ -357,14 +403,27 @@ export function GroupStopwatch({
               {formatTime(elapsedTime)}
             </Text>
             {isRunning && (
-              <Text style={styles.tapHint}>Tap to record split</Text>
+              <Text style={styles.tapHint}>
+                {showVoiceCapture && voiceAthletes.isListening
+                  ? 'Tap & call out the athlete’s name'
+                  : 'Tap to record split'}
+              </Text>
             )}
           </Pressable>}
 
           {!isComplete && <View style={styles.splitsRow}>
             {splits.map((s, i) => (
-              <View key={s.id} style={[styles.splitPill, { borderColor: colorPair[0] }]}>
-                <Text style={styles.splitPillNum}>#{i + 1}</Text>
+              <View
+                key={s.id}
+                style={[
+                  styles.splitPill,
+                  { borderColor: colorPair[0] },
+                  s.athlete_name && { backgroundColor: 'rgba(168, 85, 247, 0.12)' },
+                ]}
+              >
+                <Text style={styles.splitPillNum} numberOfLines={1}>
+                  {s.athlete_name || `#${i + 1}`}
+                </Text>
                 <Text style={[styles.splitPillTime, { color: colorPair[0] }]}>
                   {formatTime(s.time_ms)}
                 </Text>
@@ -373,18 +432,31 @@ export function GroupStopwatch({
           </View>}
 
           {isRunning && showVoiceCapture && (
-            <VoiceAthleteCapture
-              isListening={voiceAthletes.isListening}
-              isProcessing={voiceAthletes.isProcessing}
-              recognizedAthletes={voiceAthletes.recognizedAthletes}
-              currentTranscript={voiceAthletes.currentTranscript}
-              error={voiceAthletes.error}
-              onToggleListening={voiceAthletes.toggleListening}
-              onRemoveAthlete={voiceAthletes.removeAthlete}
-              onClearAll={voiceAthletes.clearRecognizedAthletes}
-              onConfirm={handleVoiceAthletesConfirm}
-              existingAthletes={group.athlete_names || []}
-            />
+            <View style={styles.voicePanel}>
+              <View style={styles.voicePanelRow}>
+                <View
+                  style={[
+                    styles.voiceDot,
+                    voiceAthletes.isListening && styles.voiceDotActive,
+                  ]}
+                />
+                <Text style={styles.voicePanelHint}>
+                  {voiceAthletes.isListening
+                    ? 'Tap the timer, then say the athlete’s name'
+                    : voiceAthletes.isProcessing
+                    ? 'Starting microphone…'
+                    : 'Microphone off'}
+                </Text>
+              </View>
+              {voiceAthletes.isListening && !!voiceAthletes.currentTranscript && (
+                <Text style={styles.voiceTranscript} numberOfLines={1}>
+                  “{voiceAthletes.currentTranscript}”
+                </Text>
+              )}
+              {!!voiceAthletes.error && (
+                <Text style={styles.voiceError}>{voiceAthletes.error}</Text>
+              )}
+            </View>
           )}
 
           {!isComplete && <View style={styles.controls}>
@@ -418,7 +490,7 @@ export function GroupStopwatch({
                       styles.voiceToggleBtn,
                       showVoiceCapture && styles.voiceToggleBtnActive,
                     ]}
-                    onPress={() => setShowVoiceCapture(!showVoiceCapture)}
+                    onPress={toggleVoice}
                   >
                     <Text style={styles.voiceToggleBtnText}>
                       {showVoiceCapture ? '🎙️ Voice On' : '🎙️ Add Voice'}
@@ -713,6 +785,47 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     fontFamily: typography.fontFamily.bold,
     fontWeight: typography.fontWeight.bold,
+    color: colors.dark.error,
+  },
+  voicePanel: {
+    backgroundColor: 'rgba(168, 85, 247, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.3)',
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  voicePanelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  voiceDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.dark.textSecondary,
+  },
+  voiceDotActive: {
+    backgroundColor: colors.dark.error,
+  },
+  voicePanelHint: {
+    flex: 1,
+    fontSize: typography.fontSize.sm,
+    fontFamily: typography.fontFamily.semibold,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.dark.secondary,
+  },
+  voiceTranscript: {
+    fontSize: typography.fontSize.sm,
+    fontFamily: typography.fontFamily.regular,
+    color: colors.dark.textSecondary,
+    fontStyle: 'italic',
+  },
+  voiceError: {
+    fontSize: typography.fontSize.xs,
+    fontFamily: typography.fontFamily.regular,
     color: colors.dark.error,
   },
   voiceToggleBtn: {
