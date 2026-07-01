@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "io.coachingsolo.app",
-      "versionCode": 2,
+      "versionCode": 4,
       "minSdkVersion": 24,
       "targetSdkVersion": 34,
       "adaptiveIcon": {

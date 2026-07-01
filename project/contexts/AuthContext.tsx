@@ -3,9 +3,14 @@ import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
 function detectRecoveryInHash(): boolean {
-  if (typeof window !== 'undefined') {
-    const hash = window.location.hash;
-    return hash.includes('type=recovery');
+  // `window` exists on native but `window.location` may be undefined there, so
+  // guard both before touching `.hash` (web-only password-recovery deep links).
+  if (
+    typeof window !== 'undefined' &&
+    window.location &&
+    typeof window.location.hash === 'string'
+  ) {
+    return window.location.hash.includes('type=recovery');
   }
   return false;
 }
