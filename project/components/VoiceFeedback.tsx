@@ -4,7 +4,6 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  Alert,
   Platform,
   Animated,
 } from 'react-native';
@@ -87,16 +86,7 @@ export function VoiceFeedback({
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.actionButton, styles.clearButton]}
-                onPress={() => {
-                  Alert.alert('Clear Transcription', 'Discard this recording?', [
-                    { text: 'Cancel', onPress: () => {} },
-                    {
-                      text: 'Clear',
-                      onPress: onTranscriptClear,
-                      style: 'destructive',
-                    },
-                  ]);
-                }}
+                onPress={onTranscriptClear}
               >
                 <Text style={styles.clearButtonText}>Clear</Text>
               </TouchableOpacity>

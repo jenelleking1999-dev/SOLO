@@ -28,6 +28,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedWorkout, setEditedWorkout] = useState<ParsedWorkout | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
   const router = useRouter();
   const { user } = useAuth();
   const parsedWorkoutRef = useRef<ParsedWorkout | null>(null);
@@ -116,10 +117,11 @@ export default function HomeScreen() {
   const handleStartWorkout = async () => {
     const currentWorkout = parsedWorkoutRef.current ?? parsedWorkout;
     if (!currentWorkout) {
-      Alert.alert('No workout yet', 'Generate a workout first, then tap Start.');
+      setStartError('Generate a workout first, then tap Start.');
       return;
     }
 
+    setStartError(null);
     setLoading(true);
     try {
       const { data: workout, error: workoutError } = await supabase
@@ -162,9 +164,10 @@ export default function HomeScreen() {
         },
       });
     } catch (error: any) {
-      // Surface the real reason instead of silently doing nothing.
-      Alert.alert(
-        'Could not start workout',
+      // Surface the real reason on-screen — Alert is a no-op on web, so a
+      // banner is the only reliable way to show what went wrong.
+      console.error('Start workout failed:', error);
+      setStartError(
         error?.message || 'Something went wrong creating the workout. Please try again.'
       );
     } finally {
@@ -306,6 +309,12 @@ export default function HomeScreen() {
                     <Text style={styles.tagText}>{tag}</Text>
                   </View>
                 ))}
+              </View>
+            )}
+
+            {startError && (
+              <View style={styles.startErrorBanner}>
+                <Text style={styles.startErrorText}>{startError}</Text>
               </View>
             )}
 
@@ -742,6 +751,20 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     fontFamily: typography.fontFamily.medium,
     fontWeight: typography.fontWeight.medium,
+  },
+  startErrorBanner: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 10,
+    padding: spacing.md,
+    marginTop: spacing.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+  },
+  startErrorText: {
+    fontSize: typography.fontSize.sm,
+    fontFamily: typography.fontFamily.regular,
+    color: colors.dark.error,
+    textAlign: 'center',
   },
   startButton: {
     borderRadius: 12,
