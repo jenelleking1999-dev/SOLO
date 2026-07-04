@@ -31,12 +31,19 @@ export function GroupAthleteAssignment({
   onComplete,
 }: GroupAthleteAssignmentProps) {
   const [localSplits, setLocalSplits] = useState<Split[]>(() =>
-    splits.map((s) => ({ ...s, athlete_name: null as string | null }))
+    // Preserve any names already captured (e.g. via live voice labeling) so the
+    // coach reviews pre-filled splits instead of starting from scratch.
+    splits.map((s) => ({ ...s }))
   );
 
   const [multiSelections, setMultiSelections] = useState<Record<string, string[]>>(() => {
     const init: Record<string, string[]> = {};
-    splits.forEach((s) => { init[s.id] = []; });
+    splits.forEach((s) => {
+      // Pre-select the live-captured name on later reps (roster-grid path) so the
+      // split shows as already assigned. On the first rep the name is edited via
+      // a text input (driven by localSplits), so leave selections empty there.
+      init[s.id] = !isFirstRep && s.athlete_name ? [s.athlete_name] : [];
+    });
     return init;
   });
 

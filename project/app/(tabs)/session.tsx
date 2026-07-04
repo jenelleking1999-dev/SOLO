@@ -141,8 +141,9 @@ export default function SessionScreen() {
   };
 
   const handleRepComplete = async (group: Group, splits: Split[]) => {
-    const clearedSplits = splits.map((s) => ({ ...s, athlete_name: null as string | null }));
-    setPendingAssignments((prev) => [...prev, { group, splits: clearedSplits }]);
+    // Keep any names captured live via voice so the post-rep assignment screen
+    // shows them pre-filled — the coach confirms/edits instead of re-entering.
+    setPendingAssignments((prev) => [...prev, { group, splits }]);
   };
 
   const handleAssignmentComplete = async (
