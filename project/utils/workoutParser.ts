@@ -95,8 +95,12 @@ function extractTimes(text: string): { target: number | null; rest: number | nul
  * and word order don't matter.
  */
 function parseSegments(input: string): WorkoutSegment[] {
+  // "<reps> <distance>" where distance may carry a unit (m/meters/yards), a
+  // plural "s" (track shorthand like "100s" = 100 metres), or no unit at all.
+  // The required reps-number prefix keeps target/rest numbers (e.g. "at 13
+  // seconds") from being mistaken for a distance.
   const anchorRe = new RegExp(
-    `\\b(${NUM})(?:\\s*(?:x|by)\\s*|\\s+)(\\d+)\\s*(?:m|meters?|yards?|yds?)\\b`,
+    `\\b(${NUM})(?:\\s*(?:x|by)\\s*|\\s+)(\\d+)\\s*(?:meters?|metres?|yards?|yds?|m|s)?\\b`,
     'gi'
   );
 
@@ -129,25 +133,29 @@ function parseSegments(input: string): WorkoutSegment[] {
 function parseGroupConfig(input: string): { group_count: number; athletes_per_group: number } {
   const lower = input.toLowerCase();
 
-  // "2 groups of 3"
-  const groupsOf = lower.match(/(\d+)\s+groups?\s+of\s+(\d+)/i);
+  // "2 groups of 3" / "two groups of two"
+  const groupsOf = lower.match(new RegExp(`\\b(${NUM})\\s+groups?\\s+of\\s+(${NUM})`, 'i'));
   if (groupsOf) {
-    return { group_count: parseInt(groupsOf[1], 10), athletes_per_group: parseInt(groupsOf[2], 10) };
+    return {
+      group_count: parseNumber(groupsOf[1]),
+      athletes_per_group: parseNumber(groupsOf[2]),
+    };
   }
 
-  const groups = lower.match(/(\d+)\s*groups?/i);
-  const group_count = groups ? parseInt(groups[1], 10) : 1;
+  const groups = lower.match(new RegExp(`\\b(${NUM})\\s*groups?`, 'i'));
+  const group_count = groups ? parseNumber(groups[1]) : 1;
 
   // "groups of 3" (no explicit count)
-  const groupsOfOnly = lower.match(/groups?\s+of\s+(\d+)/i);
-  // "3 athletes per group", "3 athletes", "3 runners", "3 per group", "3 each"
+  const groupsOfOnly = lower.match(new RegExp(`groups?\\s+of\\s+(${NUM})`, 'i'));
+  // "3 athletes per group", "three athletes", "3 runners", "3 per group", "3 each"
   const perGroup =
-    lower.match(/(\d+)\s*(?:athletes?|runners?|people|kids?|players?)\s*(?:per\s*group|each)?/i) ||
-    lower.match(/(\d+)\s*(?:per\s*group|each)/i);
+    lower.match(
+      new RegExp(`\\b(${NUM})\\s*(?:athletes?|runners?|people|kids?|players?)\\s*(?:per\\s*group|each)?`, 'i')
+    ) || lower.match(new RegExp(`\\b(${NUM})\\s*(?:per\\s*group|each)`, 'i'));
 
   let athletes_per_group = 1;
-  if (groupsOfOnly) athletes_per_group = parseInt(groupsOfOnly[1], 10);
-  else if (perGroup) athletes_per_group = parseInt(perGroup[1], 10);
+  if (groupsOfOnly) athletes_per_group = parseNumber(groupsOfOnly[1]);
+  else if (perGroup) athletes_per_group = parseNumber(perGroup[1]);
 
   return { group_count, athletes_per_group };
 }

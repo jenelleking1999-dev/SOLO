@@ -155,7 +155,7 @@ export default function HomeScreen() {
       if (sessionError) throw sessionError;
 
       router.push({
-        pathname: '/(tabs)/session',
+        pathname: '/session',
         params: {
           sessionId: session!.id,
           workoutId: workout!.id,
