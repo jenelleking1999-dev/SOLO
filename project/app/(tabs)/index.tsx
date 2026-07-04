@@ -114,8 +114,11 @@ export default function HomeScreen() {
   };
 
   const handleStartWorkout = async () => {
-    const currentWorkout = parsedWorkoutRef.current;
-    if (!currentWorkout) return;
+    const currentWorkout = parsedWorkoutRef.current ?? parsedWorkout;
+    if (!currentWorkout) {
+      Alert.alert('No workout yet', 'Generate a workout first, then tap Start.');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -158,8 +161,12 @@ export default function HomeScreen() {
           workoutId: workout!.id,
         },
       });
-    } catch (error) {
-      console.error('Error creating workout:', error);
+    } catch (error: any) {
+      // Surface the real reason instead of silently doing nothing.
+      Alert.alert(
+        'Could not start workout',
+        error?.message || 'Something went wrong creating the workout. Please try again.'
+      );
     } finally {
       setLoading(false);
     }
