@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, type ErrorBoundaryProps } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Platform, View, ActivityIndicator, StyleSheet } from 'react-native';
+import { Platform, View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { supabaseConfigError } from '@/lib/supabase';
 import { colors } from '@/constants/theme';
 
 if (Platform.OS === 'web') {
@@ -14,7 +15,74 @@ if (Platform.OS === 'web') {
   document.head.appendChild(style);
 }
 
-SplashScreen.preventAutoHideAsync();
+SplashScreen.preventAutoHideAsync().catch(() => {
+  // Non-fatal: the splash screen may already be hidden.
+});
+
+/**
+ * Catches any unexpected render-time error anywhere in the app and shows a
+ * recovery screen instead of crashing back to the phone's home screen.
+ * expo-router automatically wraps the app with this export.
+ */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return (
+    <View style={fallbackStyles.container}>
+      <Text style={fallbackStyles.title}>Something went wrong</Text>
+      <Text style={fallbackStyles.message}>{error.message}</Text>
+      <TouchableOpacity style={fallbackStyles.button} onPress={retry}>
+        <Text style={fallbackStyles.buttonText}>Try again</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+/** Shown when the build is missing its Supabase credentials. */
+function ConfigErrorScreen({ message }: { message: string }) {
+  useEffect(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
+  return (
+    <View style={fallbackStyles.container}>
+      <Text style={fallbackStyles.title}>Unable to start</Text>
+      <Text style={fallbackStyles.message}>{message}</Text>
+    </View>
+  );
+}
+
+const fallbackStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#050014',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ffffff',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  message: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.7)',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  button: {
+    backgroundColor: '#6366f1',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+  },
+  buttonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+});
 
 function PasswordRecoveryHandler({ children }: { children: React.ReactNode }) {
   const { isPasswordRecovery, clearPasswordRecovery, loading } = useAuth();
@@ -112,9 +180,14 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
+      SplashScreen.hideAsync().catch(() => {});
     }
   }, [fontsLoaded, fontError]);
+
+  // A build without server credentials must show a message, never crash.
+  if (supabaseConfigError) {
+    return <ConfigErrorScreen message={supabaseConfigError} />;
+  }
 
   if (!fontsLoaded && !fontError) {
     return null;

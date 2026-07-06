@@ -15,9 +15,7 @@
     },
     "android": {
       "package": "io.coachingsolo.app",
-      "versionCode": 5,
-      "minSdkVersion": 24,
-      "targetSdkVersion": 34,
+      "versionCode": 6,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/solo_logo-removebg-preview.png",
         "backgroundColor": "#050014"
@@ -50,10 +48,13 @@
         {
           "microphonePermission": "Allow SOLO to use the microphone to capture athlete names and workout descriptions.",
           "speechRecognitionPermission": "Allow SOLO to use speech recognition to transcribe athlete names and workouts.",
-          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
         }
       ],
-      "./plugins/withOptionalMicrophone.js"
+      "./plugins/withOptionalMicrophone.js",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true
