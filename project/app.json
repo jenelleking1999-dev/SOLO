@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "io.coachingsolo.app",
-      "versionCode": 4,
+      "versionCode": 5,
       "minSdkVersion": 24,
       "targetSdkVersion": 34,
       "adaptiveIcon": {
@@ -52,7 +52,8 @@
           "speechRecognitionPermission": "Allow SOLO to use speech recognition to transcribe athlete names and workouts.",
           "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
         }
-      ]
+      ],
+      "./plugins/withOptionalMicrophone.js"
     ],
     "experiments": {
       "typedRoutes": true
