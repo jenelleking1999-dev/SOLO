@@ -22,6 +22,50 @@ import { useVoiceWorkout } from '@/hooks/useVoiceWorkout';
 import { VoiceInputButton } from '@/components/VoiceInputButton';
 import { VoiceFeedback } from '@/components/VoiceFeedback';
 
+/**
+ * A numeric text field that can be fully cleared while editing. Empty input is
+ * allowed as you type; if you leave the field empty and blur, it falls back to
+ * `min`. This avoids the "backspace snaps to 1 and gets stuck" behaviour of a
+ * plain `parseInt(v) || 1` binding.
+ */
+function NumberInput({
+  value,
+  onChange,
+  min = 1,
+  style,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  min?: number;
+  style?: any;
+}) {
+  const [text, setText] = useState<string>(String(value ?? ''));
+
+  const handleChange = (v: string) => {
+    const digits = v.replace(/[^0-9]/g, '');
+    setText(digits);
+    if (digits !== '') onChange(parseInt(digits, 10));
+  };
+
+  const handleBlur = () => {
+    if (text.trim() === '') {
+      setText(String(min));
+      onChange(min);
+    }
+  };
+
+  return (
+    <TextInput
+      style={style}
+      value={text}
+      onChangeText={handleChange}
+      onBlur={handleBlur}
+      keyboardType="number-pad"
+      placeholderTextColor={colors.dark.textSecondary}
+    />
+  );
+}
+
 export default function HomeScreen() {
   const [workoutText, setWorkoutText] = useState('');
   const [parsedWorkout, setParsedWorkout] = useState<ParsedWorkout | null>(null);
@@ -99,6 +143,14 @@ export default function HomeScreen() {
       const num = parseInt(value) || 0;
       return { ...seg, [field]: num };
     });
+    setEditedWorkout({ ...editedWorkout, segments: updated });
+  };
+
+  const updateSegmentNumber = (index: number, field: keyof WorkoutSegment, num: number) => {
+    if (!editedWorkout) return;
+    const updated = editedWorkout.segments.map((seg, i) =>
+      i === index ? { ...seg, [field]: num } : seg
+    );
     setEditedWorkout({ ...editedWorkout, segments: updated });
   };
 
@@ -360,12 +412,11 @@ export default function HomeScreen() {
                 <View style={styles.editRow}>
                   <View style={styles.editFieldHalf}>
                     <Text style={styles.workoutLabel}>Reps</Text>
-                    <TextInput
+                    <NumberInput
                       style={styles.editInput}
-                      value={seg.reps.toString()}
-                      onChangeText={(v) => updateSegment(i, 'reps', v)}
-                      keyboardType="number-pad"
-                      placeholderTextColor={colors.dark.textSecondary}
+                      value={seg.reps}
+                      min={1}
+                      onChange={(n) => updateSegmentNumber(i, 'reps', n)}
                     />
                   </View>
                   <View style={styles.editFieldHalf}>
@@ -381,22 +432,20 @@ export default function HomeScreen() {
                 <View style={styles.editRow}>
                   <View style={styles.editFieldHalf}>
                     <Text style={styles.workoutLabel}>Target (s)</Text>
-                    <TextInput
+                    <NumberInput
                       style={styles.editInput}
-                      value={seg.targetTime.toString()}
-                      onChangeText={(v) => updateSegment(i, 'targetTime', v)}
-                      keyboardType="number-pad"
-                      placeholderTextColor={colors.dark.textSecondary}
+                      value={seg.targetTime}
+                      min={1}
+                      onChange={(n) => updateSegmentNumber(i, 'targetTime', n)}
                     />
                   </View>
                   <View style={styles.editFieldHalf}>
                     <Text style={styles.workoutLabel}>Rest (s)</Text>
-                    <TextInput
+                    <NumberInput
                       style={styles.editInput}
-                      value={seg.rest.toString()}
-                      onChangeText={(v) => updateSegment(i, 'rest', v)}
-                      keyboardType="number-pad"
-                      placeholderTextColor={colors.dark.textSecondary}
+                      value={seg.rest}
+                      min={0}
+                      onChange={(n) => updateSegmentNumber(i, 'rest', n)}
                     />
                   </View>
                 </View>
@@ -410,27 +459,21 @@ export default function HomeScreen() {
 
             <View style={styles.editField}>
               <Text style={styles.workoutLabel}>Number of Groups</Text>
-              <TextInput
+              <NumberInput
                 style={styles.editInput}
-                value={editedWorkout.group_count?.toString()}
-                onChangeText={(v) =>
-                  setEditedWorkout({ ...editedWorkout, group_count: parseInt(v) || 1 })
-                }
-                keyboardType="number-pad"
-                placeholderTextColor={colors.dark.textSecondary}
+                value={editedWorkout.group_count}
+                min={1}
+                onChange={(n) => setEditedWorkout({ ...editedWorkout, group_count: n })}
               />
             </View>
 
             <View style={styles.editField}>
               <Text style={styles.workoutLabel}>Athletes per Group</Text>
-              <TextInput
+              <NumberInput
                 style={styles.editInput}
-                value={editedWorkout.athletes_per_group?.toString()}
-                onChangeText={(v) =>
-                  setEditedWorkout({ ...editedWorkout, athletes_per_group: parseInt(v) || 1 })
-                }
-                keyboardType="number-pad"
-                placeholderTextColor={colors.dark.textSecondary}
+                value={editedWorkout.athletes_per_group}
+                min={1}
+                onChange={(n) => setEditedWorkout({ ...editedWorkout, athletes_per_group: n })}
               />
             </View>
 
