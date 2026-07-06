@@ -2064,3 +2064,18 @@ CREATE POLICY "authenticated_cannot_access_account_deletion_log" ON account_dele
 REVOKE EXECUTE ON FUNCTION public.create_athlete_split_on_update() FROM PUBLIC;
 
 
+
+-- ============================================================
+-- 20260710000000_add_anon_delete_splits_policy.sql
+-- ============================================================
+DROP POLICY IF EXISTS "Anon users can delete splits in guest sessions" ON splits;
+CREATE POLICY "Anon users can delete splits in guest sessions"
+  ON splits FOR DELETE
+  TO anon
+  USING (
+    EXISTS (
+      SELECT 1 FROM sessions
+      WHERE sessions.id = splits.session_id
+      AND sessions.user_id IS NULL
+    )
+  );
