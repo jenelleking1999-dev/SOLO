@@ -21,8 +21,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useVoiceWorkout } from '@/hooks/useVoiceWorkout';
 import { VoiceInputButton } from '@/components/VoiceInputButton';
 import { VoiceFeedback } from '@/components/VoiceFeedback';
-import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { setActiveSession, getActiveSession, clearActiveSession } from '@/lib/activeSession';
 
 /**
  * A numeric text field that can be fully cleared while editing. Empty input is
@@ -75,7 +73,6 @@ export default function HomeScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedWorkout, setEditedWorkout] = useState<ParsedWorkout | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
-  const [showInProgressWarning, setShowInProgressWarning] = useState(false);
   const router = useRouter();
   const { user } = useAuth();
   const parsedWorkoutRef = useRef<ParsedWorkout | null>(null);
@@ -169,37 +166,13 @@ export default function HomeScreen() {
     setEditedWorkout({ ...editedWorkout, segments: updated });
   };
 
-  // Only the workout this device actually started (and hasn't finished) counts
-  // as "in progress" — this avoids false warnings from old, abandoned sessions
-  // left in the database.
-  const findInProgressSessionId = async (): Promise<string | null> => {
-    const storedId = await getActiveSession();
-    if (!storedId) return null;
-
-    // Confirm it still exists and hasn't already been completed.
-    const { data } = await supabase
-      .from('sessions')
-      .select('id, status')
-      .eq('id', storedId)
-      .maybeSingle();
-
-    if (!data || (data as any).status === 'completed') {
-      await clearActiveSession();
-      return null;
+  const handleStartWorkout = async () => {
+    const currentWorkout = parsedWorkoutRef.current ?? parsedWorkout;
+    if (!currentWorkout) {
+      setStartError('Generate a workout first, then tap Start.');
+      return;
     }
-    return storedId;
-  };
 
-  const deleteInProgressSession = async () => {
-    const storedId = await getActiveSession();
-    if (storedId) {
-      // Deleting the session cascades to its splits, groups and athlete_splits.
-      await supabase.from('sessions').delete().eq('id', storedId);
-      await clearActiveSession();
-    }
-  };
-
-  const createAndStartWorkout = async (currentWorkout: ParsedWorkout) => {
     setStartError(null);
     setLoading(true);
     try {
@@ -235,9 +208,6 @@ export default function HomeScreen() {
 
       if (sessionError) throw sessionError;
 
-      // Remember this as the device's in-progress workout.
-      await setActiveSession(session!.id);
-
       router.push({
         pathname: '/session',
         params: {
@@ -255,49 +225,6 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleStartWorkout = async () => {
-    const currentWorkout = parsedWorkoutRef.current ?? parsedWorkout;
-    if (!currentWorkout) {
-      setStartError('Generate a workout first, then tap Start.');
-      return;
-    }
-
-    setStartError(null);
-    setLoading(true);
-    let inProgressId: string | null = null;
-    try {
-      inProgressId = await findInProgressSessionId();
-    } catch {
-      // If the check fails (e.g. offline), fall through and just start.
-    }
-    setLoading(false);
-
-    if (inProgressId) {
-      // A previous workout is still in progress — confirm before discarding it.
-      setShowInProgressWarning(true);
-      return;
-    }
-
-    await createAndStartWorkout(currentWorkout);
-  };
-
-  const proceedWithNewWorkout = async () => {
-    setShowInProgressWarning(false);
-    const currentWorkout = parsedWorkoutRef.current ?? parsedWorkout;
-    if (!currentWorkout) return;
-
-    setLoading(true);
-    try {
-      await deleteInProgressSession();
-    } catch (error) {
-      console.error('Failed to clear previous workout:', error);
-    } finally {
-      setLoading(false);
-    }
-
-    await createAndStartWorkout(currentWorkout);
   };
 
   const isMultiSegment = (parsedWorkout?.segments?.length ?? 0) > 1;
@@ -602,17 +529,6 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
-
-      <ConfirmDialog
-        visible={showInProgressWarning}
-        title="Workout in progress"
-        message="You still have a workout that hasn't been finished. If you start this new one, the previous workout and any results from it that weren't completed will be permanently deleted. Continue?"
-        confirmLabel="Delete & start new"
-        cancelLabel="Keep previous"
-        destructive
-        onConfirm={proceedWithNewWorkout}
-        onCancel={() => setShowInProgressWarning(false)}
-      />
     </LinearGradient>
   );
 }

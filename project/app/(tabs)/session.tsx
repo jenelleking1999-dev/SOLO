@@ -20,7 +20,6 @@ import { Workout, Session, Split, Group, WorkoutSegment } from '@/types/database
 import { GroupStopwatch } from '@/components/GroupStopwatch';
 import { GroupAthleteAssignment } from '@/components/GroupAthleteAssignment';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { clearActiveSession } from '@/lib/activeSession';
 
 const GROUP_LABELS = ['Group A', 'Group B', 'Group C', 'Group D', 'Group E', 'Group F'];
 
@@ -50,21 +49,15 @@ export default function SessionScreen() {
   const [showLeaveWarning, setShowLeaveWarning] = useState(false);
   const leavingRef = useRef(false);
 
-  // Pause the workout (stop any running group, mark the session paused) and leave.
-  const pauseAndLeave = async () => {
+  // Leaving discards the workout: delete the session (cascades to its splits,
+  // groups and athlete_splits) and go back.
+  const deleteAndLeave = async () => {
     setShowLeaveWarning(false);
     leavingRef.current = true;
     try {
-      await supabase
-        .from('groups')
-        .update({ is_active: false } as any)
-        .eq('session_id', sessionId);
-      await supabase
-        .from('sessions')
-        .update({ status: 'paused' } as any)
-        .eq('id', sessionId);
+      await supabase.from('sessions').delete().eq('id', sessionId);
     } catch {
-      // leave regardless of a persistence hiccup
+      // leave regardless of a delete hiccup
     }
     goBack();
   };
@@ -482,9 +475,6 @@ export default function SessionScreen() {
       if (error) throw error;
       if (!savedWorkout) throw new Error('No session returned after save');
 
-      // This workout is finished — it's no longer the device's in-progress one.
-      await clearActiveSession();
-
 
       router.replace({
         pathname: '/results',
@@ -543,11 +533,12 @@ export default function SessionScreen() {
   const leaveDialog = (
     <ConfirmDialog
       visible={showLeaveWarning}
-      title="Leave workout?"
-      message="This workout will be paused and your recorded results are saved until you return. Leave now?"
-      confirmLabel="Pause & leave"
+      title="Leave and delete workout?"
+      message="If you leave this page, the workout will be deleted along with any results you've recorded so far. This can't be undone. Leave anyway?"
+      confirmLabel="Leave & delete"
       cancelLabel="Stay"
-      onConfirm={pauseAndLeave}
+      destructive
+      onConfirm={deleteAndLeave}
       onCancel={() => setShowLeaveWarning(false)}
     />
   );
