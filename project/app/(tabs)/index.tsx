@@ -22,6 +22,7 @@ import { useVoiceWorkout } from '@/hooks/useVoiceWorkout';
 import { VoiceInputButton } from '@/components/VoiceInputButton';
 import { VoiceFeedback } from '@/components/VoiceFeedback';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { setActiveSession, getActiveSession, clearActiveSession } from '@/lib/activeSession';
 
 /**
  * A numeric text field that can be fully cleared while editing. Empty input is
@@ -168,24 +169,34 @@ export default function HomeScreen() {
     setEditedWorkout({ ...editedWorkout, segments: updated });
   };
 
-  // Scope a sessions query to the current user (or guest sessions when signed out).
-  const scopeToUser = (query: any) =>
-    user?.id ? query.eq('user_id', user.id) : query.is('user_id', null);
-
+  // Only the workout this device actually started (and hasn't finished) counts
+  // as "in progress" — this avoids false warnings from old, abandoned sessions
+  // left in the database.
   const findInProgressSessionId = async (): Promise<string | null> => {
-    const { data } = await scopeToUser(
-      supabase.from('sessions').select('id').neq('status', 'completed')
-    )
-      .order('created_at', { ascending: false })
-      .limit(1);
-    return data && data.length > 0 ? (data[0] as any).id : null;
+    const storedId = await getActiveSession();
+    if (!storedId) return null;
+
+    // Confirm it still exists and hasn't already been completed.
+    const { data } = await supabase
+      .from('sessions')
+      .select('id, status')
+      .eq('id', storedId)
+      .maybeSingle();
+
+    if (!data || (data as any).status === 'completed') {
+      await clearActiveSession();
+      return null;
+    }
+    return storedId;
   };
 
-  const deleteInProgressSessions = async () => {
-    // Deleting the session cascades to its splits, groups and athlete_splits.
-    await scopeToUser(
-      supabase.from('sessions').delete().neq('status', 'completed')
-    );
+  const deleteInProgressSession = async () => {
+    const storedId = await getActiveSession();
+    if (storedId) {
+      // Deleting the session cascades to its splits, groups and athlete_splits.
+      await supabase.from('sessions').delete().eq('id', storedId);
+      await clearActiveSession();
+    }
   };
 
   const createAndStartWorkout = async (currentWorkout: ParsedWorkout) => {
@@ -223,6 +234,9 @@ export default function HomeScreen() {
         .single();
 
       if (sessionError) throw sessionError;
+
+      // Remember this as the device's in-progress workout.
+      await setActiveSession(session!.id);
 
       router.push({
         pathname: '/session',
@@ -276,7 +290,7 @@ export default function HomeScreen() {
 
     setLoading(true);
     try {
-      await deleteInProgressSessions();
+      await deleteInProgressSession();
     } catch (error) {
       console.error('Failed to clear previous workout:', error);
     } finally {

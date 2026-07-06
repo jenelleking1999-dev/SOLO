@@ -20,6 +20,7 @@ import { Workout, Session, Split, Group, WorkoutSegment } from '@/types/database
 import { GroupStopwatch } from '@/components/GroupStopwatch';
 import { GroupAthleteAssignment } from '@/components/GroupAthleteAssignment';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { clearActiveSession } from '@/lib/activeSession';
 
 const GROUP_LABELS = ['Group A', 'Group B', 'Group C', 'Group D', 'Group E', 'Group F'];
 
@@ -480,6 +481,9 @@ export default function SessionScreen() {
 
       if (error) throw error;
       if (!savedWorkout) throw new Error('No session returned after save');
+
+      // This workout is finished — it's no longer the device's in-progress one.
+      await clearActiveSession();
 
 
       router.replace({
