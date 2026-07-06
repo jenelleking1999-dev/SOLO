@@ -2079,3 +2079,18 @@ CREATE POLICY "Anon users can delete splits in guest sessions"
       AND sessions.user_id IS NULL
     )
   );
+
+-- ============================================================
+-- 20260712000000_add_session_delete_policies.sql
+-- ============================================================
+DROP POLICY IF EXISTS "Authenticated users can delete their sessions" ON sessions;
+CREATE POLICY "Authenticated users can delete their sessions"
+  ON sessions FOR DELETE
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Anon users can delete guest sessions" ON sessions;
+CREATE POLICY "Anon users can delete guest sessions"
+  ON sessions FOR DELETE
+  TO anon
+  USING (user_id IS NULL);

@@ -41,6 +41,9 @@ export default function TabLayout() {
         name="session"
         options={{
           href: null,
+          // Hide the tab bar during a workout so the only way out is the
+          // guarded back button (which warns and pauses the workout).
+          tabBarStyle: { display: 'none' },
         }}
       />
     </Tabs>

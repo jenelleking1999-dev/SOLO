@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  BackHandler,
 } from 'react-native';
 
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,6 +19,7 @@ import { Workout, Session, Split, Group, WorkoutSegment } from '@/types/database
 
 import { GroupStopwatch } from '@/components/GroupStopwatch';
 import { GroupAthleteAssignment } from '@/components/GroupAthleteAssignment';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 const GROUP_LABELS = ['Group A', 'Group B', 'Group C', 'Group D', 'Group E', 'Group F'];
 
@@ -44,6 +46,28 @@ export default function SessionScreen() {
     }
   };
 
+  const [showLeaveWarning, setShowLeaveWarning] = useState(false);
+  const leavingRef = useRef(false);
+
+  // Pause the workout (stop any running group, mark the session paused) and leave.
+  const pauseAndLeave = async () => {
+    setShowLeaveWarning(false);
+    leavingRef.current = true;
+    try {
+      await supabase
+        .from('groups')
+        .update({ is_active: false } as any)
+        .eq('session_id', sessionId);
+      await supabase
+        .from('sessions')
+        .update({ status: 'paused' } as any)
+        .eq('id', sessionId);
+    } catch {
+      // leave regardless of a persistence hiccup
+    }
+    goBack();
+  };
+
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -60,6 +84,16 @@ export default function SessionScreen() {
     if (!sessionId || !workoutId) return;
     init();
   }, [sessionId, workoutId]);
+
+  // Warn on the Android hardware back button while a workout is in progress.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (leavingRef.current || loading || !workout) return false;
+      setShowLeaveWarning(true);
+      return true;
+    });
+    return () => sub.remove();
+  }, [loading, workout]);
 
   const getActiveSegment = (w: Workout, segIdx: number): WorkoutSegment => {
     const segs = w.segments ?? [];
@@ -502,6 +536,18 @@ export default function SessionScreen() {
   const segments = workout.segments ?? [];
   const isMultiSegment = segments.length > 1;
 
+  const leaveDialog = (
+    <ConfirmDialog
+      visible={showLeaveWarning}
+      title="Leave workout?"
+      message="This workout will be paused and your recorded results are saved until you return. Leave now?"
+      confirmLabel="Pause & leave"
+      cancelLabel="Stay"
+      onConfirm={pauseAndLeave}
+      onCancel={() => setShowLeaveWarning(false)}
+    />
+  );
+
   if (pendingAssignments.length > 0) {
     const { group, splits } = pendingAssignments[0];
     const isFirstRep = group.current_rep === 1 && group.athlete_names.length === 0;
@@ -534,6 +580,7 @@ export default function SessionScreen() {
             onComplete={handleAssignmentComplete}
           />
         </ScrollView>
+        {leaveDialog}
       </LinearGradient>
     );
   }
@@ -544,7 +591,7 @@ export default function SessionScreen() {
       style={styles.container}
     >
       <View style={styles.sessionHeader}>
-        <TouchableOpacity style={styles.backBtn} onPress={goBack}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => setShowLeaveWarning(true)}>
           <ArrowLeft size={24} color={colors.dark.text} />
         </TouchableOpacity>
         <View style={styles.sessionHeaderCenter}>
@@ -598,6 +645,7 @@ export default function SessionScreen() {
           />
         ))}
       </ScrollView>
+      {leaveDialog}
     </LinearGradient>
   );
 }
