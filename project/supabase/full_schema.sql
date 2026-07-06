@@ -1,4 +1,19 @@
 -- ============================================================
+-- PREREQUISITE: account_deletion_log table
+-- Referenced by later migrations (grants / RLS policies) but its CREATE
+-- lived outside the migrations folder. Added here so the schema builds
+-- cleanly on a fresh database.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS account_deletion_log (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  email text,
+  deleted_at timestamptz DEFAULT now()
+);
+ALTER TABLE account_deletion_log ENABLE ROW LEVEL SECURITY;
+
+
+-- ============================================================
 -- 20260404194116_create_solo_app_schema.sql
 -- ============================================================
 /*
