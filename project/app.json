@@ -29,8 +29,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "io.coachingsolo.app",
+      "buildNumber": "6",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "We need microphone access to record your workout descriptions using voice input."
+        "NSMicrophoneUsageDescription": "We need microphone access to record your workout descriptions using voice input.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "web": {
