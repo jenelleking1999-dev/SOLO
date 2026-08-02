@@ -29,9 +29,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "io.coachingsolo.app",
-      "buildNumber": "6",
+      "buildNumber": "7",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "We need microphone access to record your workout descriptions using voice input.",
+        "NSSpeechRecognitionUsageDescription": "Speech recognition is used to transcribe your spoken workout descriptions and athlete names into text.",
+        "NSPhotoLibraryUsageDescription": "SOLO does not access your photos. This entry is required because a system file-handling library included in the app references the photo library API.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
