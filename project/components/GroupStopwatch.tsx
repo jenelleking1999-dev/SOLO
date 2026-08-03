@@ -19,8 +19,9 @@ import { Split, Group } from '@/types/database';
 import { useContinuousVoiceAthletes } from '@/hooks/useContinuousVoiceAthletes';
 
 // How long (ms) an unpaired tap waits for a spoken name, and vice-versa.
-// Covers the lag between tapping and the recognizer finalizing the name.
-const PAIR_WINDOW_MS = 4000;
+// Covers the lag between tapping and the recognizer settling on the name
+// (~800ms settle delay plus however long the coach takes to speak).
+const PAIR_WINDOW_MS = 8000;
 
 interface GroupStopwatchProps {
   group: Group;
@@ -252,20 +253,20 @@ export function GroupStopwatch({
 
     setSplits((prev) => [...prev, split]);
 
-    // Pair the tapped split with a called-out athlete name.
-    if (voiceAthletes.isListening) {
-      const now = Date.now();
-      pendingNamesRef.current = pendingNamesRef.current.filter(
-        (n) => now - n.heardAt <= PAIR_WINDOW_MS
-      );
-      const heard = pendingNamesRef.current.shift();
-      if (heard) {
-        // A name was already spoken during/just before this tap.
-        assignNameToSplit(split.id, heard.name);
-      } else {
-        // Wait for the name called out immediately after the tap.
-        pendingTapsRef.current.push({ id: split.id, tappedAt });
-      }
+    // Pair the tapped split with a called-out athlete name. We queue the tap
+    // unconditionally: if voice isn't running no name ever arrives and the
+    // entry simply expires, so there's no downside to always being ready.
+    const now = Date.now();
+    pendingNamesRef.current = pendingNamesRef.current.filter(
+      (n) => now - n.heardAt <= PAIR_WINDOW_MS
+    );
+    const heard = pendingNamesRef.current.shift();
+    if (heard) {
+      // A name was already spoken during/just before this tap.
+      assignNameToSplit(split.id, heard.name);
+    } else {
+      // Wait for the name called out immediately after the tap.
+      pendingTapsRef.current.push({ id: split.id, tappedAt });
     }
   };
 

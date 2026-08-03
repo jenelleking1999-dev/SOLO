@@ -79,10 +79,30 @@ export function useContinuousVoiceAthletes({
   // True between a user-initiated start and stop; lets us auto-restart if the
   // OS ends recognition on a silence timeout so listening stays continuous.
   const wantListeningRef = useRef(false);
+  // How many words of the current utterance have already been turned into a
+  // name. In continuous mode the recognizer returns a growing transcript, so we
+  // only act on the words added since last time.
+  const processedWordsRef = useRef(0);
+  // Interim results get revised as the recognizer refines a word ("Sha" ->
+  // "Sarah"), so we wait for it to settle before acting on new words.
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const SETTLE_MS = 800;
+
   // Keep latest roster / callback available inside listeners without
   // re-subscribing on every render.
   const rosterRef = useRef(existingAthletes);
   const onNameRef = useRef(onNameRecognized);
+
+  /** Turn only the words added since last time into an athlete name. */
+  const consumeNewWords = (phrase: string) => {
+    if (!isMountedRef.current) return;
+    const words = phrase.split(/\s+/).filter(Boolean);
+    if (words.length <= processedWordsRef.current) return; // nothing new said
+    const fresh = words.slice(processedWordsRef.current);
+    processedWordsRef.current = words.length;
+    const name = pickName(fresh.join(' '), rosterRef.current);
+    if (name) onNameRef.current(name);
+  };
 
   useEffect(() => {
     rosterRef.current = existingAthletes;
@@ -105,6 +125,7 @@ export function useContinuousVoiceAthletes({
     return () => {
       isMountedRef.current = false;
       wantListeningRef.current = false;
+      if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
       if (voiceAvailable) {
         try {
           SpeechRecognition.stop();
@@ -121,6 +142,8 @@ export function useContinuousVoiceAthletes({
     const subs = [
       SpeechRecognition.addListener('start', () => {
         if (isMountedRef.current) {
+          // A new session starts with an empty transcript.
+          processedWordsRef.current = 0;
           setIsListening(true);
           setIsProcessing(false);
           setError(null);
@@ -148,10 +171,19 @@ export function useContinuousVoiceAthletes({
 
         setCurrentTranscript(phrase);
 
-        // Only act on finalized phrases so we don't fire on every interim word.
+        if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+
         if (event.isFinal) {
-          const name = pickName(phrase, rosterRef.current);
-          if (name) onNameRef.current(name);
+          // Utterance closed: consume it now and start a fresh transcript window.
+          consumeNewWords(phrase);
+          processedWordsRef.current = 0;
+        } else {
+          // In continuous mode `isFinal` often never fires, so act on interim
+          // results once the recognizer has settled on the word.
+          settleTimerRef.current = setTimeout(
+            () => consumeNewWords(phrase),
+            SETTLE_MS
+          );
         }
       }),
       SpeechRecognition.addListener('error', (event: any) => {
