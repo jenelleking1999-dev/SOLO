@@ -29,7 +29,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "io.coachingsolo.app",
-      "buildNumber": "8",
+      "buildNumber": "9",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "We need microphone access to record your workout descriptions using voice input.",
         "NSSpeechRecognitionUsageDescription": "Speech recognition is used to transcribe your spoken workout descriptions and athlete names into text.",

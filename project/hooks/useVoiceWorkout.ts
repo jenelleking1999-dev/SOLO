@@ -48,6 +48,11 @@ export function useVoiceWorkout() {
   // Accumulates every finalized phrase so continuous dictation builds up the
   // full transcript instead of each new phrase overwriting the last one.
   const finalTranscriptRef = useRef('');
+  // The recognizer returns a CUMULATIVE transcript for the current session, so
+  // this holds that latest phrase and is replaced (never appended) while the
+  // session runs. It is folded into finalTranscriptRef only when the utterance
+  // or session ends, which is what keeps text from being duplicated.
+  const sessionPhraseRef = useRef('');
   // True between a user-initiated start and a user-initiated stop. Lets us
   // auto-restart the recognizer if the OS ends it on silence, so recording
   // truly continues until the user taps the mic again.
@@ -86,6 +91,7 @@ export function useVoiceWorkout() {
         if (isMountedRef.current) {
           // Clear isProcessing here so the mic button becomes tappable again
           // (it is disabled while processing) — otherwise the user can't stop.
+          sessionPhraseRef.current = '';
           setState((prev) => ({
             ...prev,
             isRecording: true,
@@ -100,6 +106,13 @@ export function useVoiceWorkout() {
         // tapped stop — restart so recording stays continuous.
         if (wantListeningRef.current && voiceAvailable) {
           try {
+            // The ending session's transcript is lost on restart, so commit any
+            // interim text first or the user's words would disappear.
+            if (sessionPhraseRef.current) {
+              finalTranscriptRef.current =
+                `${finalTranscriptRef.current} ${sessionPhraseRef.current}`.trim();
+              sessionPhraseRef.current = '';
+            }
             beginRecognition();
             return;
           } catch {
@@ -122,12 +135,15 @@ export function useVoiceWorkout() {
         if (!phrase) return;
 
         if (event.isFinal) {
-          // Lock in this finalized phrase and append it to the running text.
+          // Utterance closed: fold it into the committed text and start fresh.
           finalTranscriptRef.current =
             `${finalTranscriptRef.current} ${phrase}`.trim();
+          sessionPhraseRef.current = '';
           setState((prev) => ({ ...prev, transcript: finalTranscriptRef.current }));
         } else {
-          // Show finalized text so far plus the in-progress (interim) phrase.
+          // Interim results are cumulative for this session, so REPLACE the
+          // session phrase rather than appending it.
+          sessionPhraseRef.current = phrase;
           const live = `${finalTranscriptRef.current} ${phrase}`.trim();
           setState((prev) => ({ ...prev, transcript: live }));
         }
@@ -175,6 +191,7 @@ export function useVoiceWorkout() {
     try {
       // Reset the running transcript for a fresh dictation session.
       finalTranscriptRef.current = '';
+      sessionPhraseRef.current = '';
       setState((prev) => ({
         ...prev,
         isProcessing: true,
