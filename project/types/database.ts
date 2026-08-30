@@ -1,4 +1,4 @@
-export interface Profile {
+export type Profile = {
   id: string;
   email: string | null;
   full_name: string | null;
@@ -6,14 +6,14 @@ export interface Profile {
   updated_at: string;
 }
 
-export interface WorkoutSegment {
+export type WorkoutSegment = {
   reps: number;
   distance: string;
   targetTime: number;
   rest: number;
 }
 
-export interface Workout {
+export type Workout = {
   id: string;
   user_id: string | null;
   name: string;
@@ -28,7 +28,7 @@ export interface Workout {
   created_at: string;
 }
 
-export interface Session {
+export type Session = {
   id: string;
   workout_id: string;
   user_id: string | null;
@@ -40,7 +40,7 @@ export interface Session {
   created_at: string;
 }
 
-export interface Group {
+export type Group = {
   id: string;
   session_id: string;
   label: string;
@@ -52,7 +52,7 @@ export interface Group {
   created_at: string;
 }
 
-export interface Split {
+export type Split = {
   id: string;
   session_id: string;
   rep_number: number;
@@ -65,7 +65,7 @@ export interface Split {
   created_at: string;
 }
 
-export interface Athlete {
+export type Athlete = {
   id: string;
   user_id: string;
   name: string;
@@ -73,7 +73,7 @@ export interface Athlete {
   created_at: string;
 }
 
-export interface AthleteSplit {
+export type AthleteSplit = {
   id: string;
   athlete_name: string;
   split_id: string;
@@ -92,44 +92,55 @@ export interface AthleteSplit {
   created_at: string;
 }
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       profiles: {
         Row: Profile;
         Insert: Omit<Profile, 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Omit<Profile, 'id' | 'created_at'>>;
+        Relationships: [];
       };
       workouts: {
         Row: Workout;
         Insert: Omit<Workout, 'id' | 'created_at'>;
         Update: Partial<Omit<Workout, 'id' | 'created_at'>>;
+        Relationships: [];
       };
       sessions: {
         Row: Session;
         Insert: Omit<Session, 'id' | 'created_at'>;
         Update: Partial<Omit<Session, 'id' | 'created_at'>>;
+        Relationships: [];
       };
       groups: {
         Row: Group;
         Insert: Omit<Group, 'id' | 'created_at'>;
         Update: Partial<Omit<Group, 'id' | 'created_at'>>;
+        Relationships: [];
       };
       splits: {
         Row: Split;
         Insert: Omit<Split, 'id' | 'created_at'>;
         Update: Partial<Omit<Split, 'id' | 'created_at'>>;
+        Relationships: [];
       };
       athletes: {
         Row: Athlete;
         Insert: Omit<Athlete, 'id' | 'created_at'>;
         Update: Partial<Omit<Athlete, 'id' | 'created_at'>>;
+        Relationships: [];
       };
       athlete_splits: {
         Row: AthleteSplit;
         Insert: Omit<AthleteSplit, 'id' | 'created_at'>;
         Update: Partial<Omit<AthleteSplit, 'id' | 'created_at'>>;
+        Relationships: [];
       };
     };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
   };
 }
