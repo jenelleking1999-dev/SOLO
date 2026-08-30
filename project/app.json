@@ -2,7 +2,7 @@
   "expo": {
     "name": "CoachingSolo",
     "slug": "bolt-expo-nativewind",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/solo_logo-removebg-preview.png",
     "scheme": "coachingsolo",
@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "io.coachingsolo.app",
-      "versionCode": 6,
+      "versionCode": 7,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/solo_logo-removebg-preview.png",
         "backgroundColor": "#050014"
