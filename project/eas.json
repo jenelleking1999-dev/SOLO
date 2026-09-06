@@ -39,6 +39,11 @@
       "android": {
         "serviceAccountKeyPath": "./google-play-service-account.json",
         "track": "internal"
+      },
+      "ios": {
+        "appleId": "nelliepop999@gmail.com",
+        "appleTeamId": "29LQ5V2UFT",
+        "ascAppId": "6792963116"
       }
     }
   }
