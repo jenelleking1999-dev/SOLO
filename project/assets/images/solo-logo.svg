@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000" role="img" aria-label="SOLO">
+  <title>SOLO</title>
+  <defs>
+    <linearGradient id="soloGradient" x1="0" y1="0" x2="1000" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#020208"/>
+      <stop offset="0.10" stop-color="#0B0A29"/>
+      <stop offset="0.20" stop-color="#15144D"/>
+      <stop offset="0.30" stop-color="#1F1E7B"/>
+      <stop offset="0.40" stop-color="#2A28A5"/>
+      <stop offset="0.50" stop-color="#3433CC"/>
+      <stop offset="0.60" stop-color="#3549CE"/>
+      <stop offset="0.70" stop-color="#3460CD"/>
+      <stop offset="0.80" stop-color="#3476CD"/>
+      <stop offset="0.90" stop-color="#338DCC"/>
+      <stop offset="1"    stop-color="#33A0CC"/>
+    </linearGradient>
+  </defs>
+
+  <circle cx="500" cy="500" r="500" fill="url(#soloGradient)"/>
+
+  <!-- The mark is two congruent parallelograms, point-symmetric about the
+       centre, meeting at a hairline seam to form the S. -->
+  <path d="M508 188 H820 L500 497 H188 Z" fill="#FFFFFF"/>
+  <path d="M500 503 H812 L492 812 H180 Z" fill="#FFFFFF"/>
+</svg>

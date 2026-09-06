@@ -4,12 +4,12 @@
     "slug": "bolt-expo-nativewind",
     "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/images/solo_logo-removebg-preview.png",
+    "icon": "./assets/images/icon.png",
     "scheme": "coachingsolo",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/solo_logo-removebg-preview.png",
+      "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#050014"
     },
@@ -17,7 +17,7 @@
       "package": "io.coachingsolo.app",
       "versionCode": 7,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/solo_logo-removebg-preview.png",
+        "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#050014"
       },
       "permissions": [
@@ -40,7 +40,7 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/images/solo_logo-removebg-preview.png"
+      "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       "expo-router",
