@@ -27,6 +27,32 @@ if (!isExpoGo) {
   }
 }
 
+/**
+ * Phrases fed to the recognizer as context. Track distances are a small closed
+ * set, so naming them makes the engine far likelier to transcribe "100 meters"
+ * than some neighbouring digit run.
+ */
+const TRACK_DISTANCES = [
+  50, 55, 60, 100, 110, 150, 200, 300, 400, 500, 600, 800, 1000, 1200, 1600, 3200,
+];
+
+const WORKOUT_VOCABULARY: string[] = [
+  ...TRACK_DISTANCES.map((d) => `${d} meters`),
+  ...TRACK_DISTANCES.map((d) => `${d}s`),
+  'seconds rest',
+  'seconds target',
+  'minutes rest',
+  'at 30 seconds',
+  'with 60 seconds rest',
+  'groups of',
+  'athletes per group',
+  'reps',
+  'repeats',
+  'meters',
+  'yards',
+  'mile repeats',
+];
+
 export interface VoiceWorkoutState {
   isRecording: boolean;
   isProcessing: boolean;
@@ -72,6 +98,17 @@ export function useVoiceWorkout() {
       // Default is 5. Anything above 1 returns competing transcriptions of the
       // same utterance, which we would otherwise concatenate into duplicated text.
       maxAlternatives: 1,
+      // Numbers are the whole payload of a workout description, and the
+      // recognizers mangle them by default: "two 100s at 30 seconds" comes back
+      // as "2/1302" because auto-formatting collapses a run of numbers into a
+      // date or fraction. `addsPunctuation: false` disables EXTRA_ENABLE_FORMATTING
+      // on Android, and the dictation task hint asks iOS for literal, keyboard
+      // style transcription instead of the search-style shorthand it defaults to.
+      addsPunctuation: false,
+      iosTaskHint: 'dictation',
+      // Bias both engines toward real track phrasing so distances land on the
+      // standard set rather than arbitrary digit runs.
+      contextualStrings: WORKOUT_VOCABULARY,
     });
   };
 

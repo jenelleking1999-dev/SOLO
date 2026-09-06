@@ -29,6 +29,33 @@ const NUMBER_WORDS =
   'eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|one|two|three|four|five|six|seven|eight|nine|ten';
 const NUM = `\\d+|${NUMBER_WORDS}`;
 
+/**
+ * Undo the number formatting speech recognizers apply to dictated workouts.
+ *
+ * A run of spoken numbers ("two 100s at 30 seconds") is ambiguous to the
+ * engine, which happily renders it as a date or fraction — "2/1302". These
+ * separators never appear in a legitimately typed workout, so splitting on
+ * them recovers the underlying digits. Note this cannot repair digits the
+ * recognizer merged outright; it only unglues ones it punctuated.
+ */
+export function normalizeDictatedNumbers(text: string): string {
+  return (
+    text
+      // "1,000" / "1 000" -> "1000"
+      .replace(/(\d),(\d{3})\b/g, '$1$2')
+      // Date- and fraction-style glue between numbers: "2/100", "4-200", "2\100"
+      .replace(/(\d)\s*[/\\|]\s*(\d)/g, '$1 $2')
+      // Hyphen between numbers is nearly always "4-200" meaning "4 x 200"
+      .replace(/(\d)\s*[-–—]\s*(\d)/g, '$1 $2')
+      // Unicode multiplication signs -> the "x" the anchor regex expects
+      .replace(/[×✕✖]/g, 'x')
+      // "4by200" with no spaces
+      .replace(/(\d)\s*(?:x|by)\s*(\d)/gi, '$1 x $2')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+  );
+}
+
 function parseNumber(str: string): number {
   const lower = str.toLowerCase().trim().replace(/x$/, '');
   if (wordToNumber[lower] !== undefined) return wordToNumber[lower];
@@ -161,7 +188,7 @@ function parseGroupConfig(input: string): { group_count: number; athletes_per_gr
 }
 
 export function parseWorkoutText(text: string): ParsedWorkout | null {
-  const input = text.toLowerCase();
+  const input = normalizeDictatedNumbers(text.toLowerCase());
 
   const { group_count, athletes_per_group } = parseGroupConfig(input);
 
