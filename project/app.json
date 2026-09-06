@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "io.coachingsolo.app",
-      "versionCode": 7,
+      "versionCode": 8,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#050014"
@@ -29,7 +29,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "io.coachingsolo.app",
-      "buildNumber": "10",
+      "buildNumber": "11",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "We need microphone access to record your workout descriptions using voice input.",
         "NSSpeechRecognitionUsageDescription": "Speech recognition is used to transcribe your spoken workout descriptions and athlete names into text.",
