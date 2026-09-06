@@ -57,14 +57,31 @@ export function useVoiceWorkout() {
   // auto-restart the recognizer if the OS ends it on silence, so recording
   // truly continues until the user taps the mic again.
   const wantListeningRef = useRef(false);
+  // The native module is a singleton and its events are broadcast to EVERY
+  // subscribed listener. The Home tab stays mounted during a workout, so
+  // without this flag the athlete names called out on the session screen would
+  // stream into the workout builder's transcript. Only handle events belonging
+  // to a recognition session this hook actually started.
+  const isOwnerRef = useRef(false);
 
   const beginRecognition = () => {
     SpeechRecognition.start({
       lang: 'en-US',
       interimResults: true,
       continuous: true,
+      // Default is 5. Anything above 1 returns competing transcriptions of the
+      // same utterance, which we would otherwise concatenate into duplicated text.
+      maxAlternatives: 1,
     });
   };
+
+  /**
+   * `results` holds ALTERNATIVE transcriptions of the same utterance, ordered
+   * best-first — not consecutive segments. Only the first is the recognizer's
+   * best guess; joining them duplicates and garbles the phrase.
+   */
+  const bestTranscript = (event: any): string =>
+    (event?.results?.[0]?.transcript ?? '').trim();
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -72,6 +89,7 @@ export function useVoiceWorkout() {
       isMountedRef.current = false;
       // Stop any in-progress recording if the screen unmounts mid-session.
       wantListeningRef.current = false;
+      isOwnerRef.current = false;
       if (voiceAvailable) {
         try {
           SpeechRecognition.stop();
@@ -88,7 +106,7 @@ export function useVoiceWorkout() {
 
     const subs = [
       SpeechRecognition.addListener('start', () => {
-        if (isMountedRef.current) {
+        if (isMountedRef.current && isOwnerRef.current) {
           // Clear isProcessing here so the mic button becomes tappable again
           // (it is disabled while processing) — otherwise the user can't stop.
           sessionPhraseRef.current = '';
@@ -101,7 +119,7 @@ export function useVoiceWorkout() {
         }
       }),
       SpeechRecognition.addListener('end', () => {
-        if (!isMountedRef.current) return;
+        if (!isMountedRef.current || !isOwnerRef.current) return;
         // The OS ended the session (e.g. silence timeout) but the user hasn't
         // tapped stop — restart so recording stays continuous.
         if (wantListeningRef.current && voiceAvailable) {
@@ -119,6 +137,9 @@ export function useVoiceWorkout() {
             // fall through and mark as stopped
           }
         }
+        // This hook no longer owns the recognizer, so later events (e.g. from
+        // the workout screen's athlete capture) must not reach the transcript.
+        isOwnerRef.current = false;
         setState((prev) => ({
           ...prev,
           isRecording: false,
@@ -126,12 +147,9 @@ export function useVoiceWorkout() {
         }));
       }),
       SpeechRecognition.addListener('result', (event: any) => {
-        if (!isMountedRef.current || !event?.results?.length) return;
+        if (!isMountedRef.current || !isOwnerRef.current) return;
 
-        const phrase = event.results
-          .map((r: any) => r.transcript)
-          .join(' ')
-          .trim();
+        const phrase = bestTranscript(event);
         if (!phrase) return;
 
         if (event.isFinal) {
@@ -149,7 +167,7 @@ export function useVoiceWorkout() {
         }
       }),
       SpeechRecognition.addListener('error', (event: any) => {
-        if (!isMountedRef.current) return;
+        if (!isMountedRef.current || !isOwnerRef.current) return;
         const raw = String(event?.error ?? '').toLowerCase();
         const isPermissionError =
           raw.includes('permission') || raw.includes('not-allowed');
@@ -163,6 +181,7 @@ export function useVoiceWorkout() {
 
         if (isFatal) {
           wantListeningRef.current = false;
+          isOwnerRef.current = false;
           setState((prev) => ({
             ...prev,
             error: `Could not recognize speech. ${event?.message || 'Please try again.'}`,
@@ -213,6 +232,7 @@ export function useVoiceWorkout() {
       // `continuous: true` keeps recording across pauses until the user taps
       // the mic again (which calls stop() and finalizes the transcript).
       wantListeningRef.current = true;
+      isOwnerRef.current = true;
       beginRecognition();
       // Optimistically mark as recording and clear processing so the mic
       // button is immediately tappable to stop, even if the native `start`

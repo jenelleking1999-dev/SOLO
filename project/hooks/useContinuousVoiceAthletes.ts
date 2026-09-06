@@ -87,6 +87,10 @@ export function useContinuousVoiceAthletes({
   // "Sarah"), so we wait for it to settle before acting on new words.
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const SETTLE_MS = 800;
+  // The native module is a singleton and broadcasts events to every subscribed
+  // listener, including the Home screen's dictation hook (whose tab stays
+  // mounted during a workout). Only handle events from a session we started.
+  const isOwnerRef = useRef(false);
 
   // Keep latest roster / callback available inside listeners without
   // re-subscribing on every render.
@@ -117,14 +121,27 @@ export function useContinuousVoiceAthletes({
       lang: 'en-US',
       interimResults: true,
       continuous: true,
+      // Default is 5. Extra alternatives are competing transcriptions of the
+      // same utterance, and concatenating them corrupts the name matching.
+      maxAlternatives: 1,
+      // Bias the recognizer toward the names it should expect to hear.
+      contextualStrings: rosterRef.current.slice(0, 100),
     });
   };
+
+  /**
+   * `results` holds ALTERNATIVE transcriptions of the same utterance, ordered
+   * best-first — not consecutive segments. Only the first is the best guess.
+   */
+  const bestTranscript = (event: any): string =>
+    (event?.results?.[0]?.transcript ?? '').trim();
 
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       wantListeningRef.current = false;
+      isOwnerRef.current = false;
       if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
       if (voiceAvailable) {
         try {
@@ -141,7 +158,7 @@ export function useContinuousVoiceAthletes({
 
     const subs = [
       SpeechRecognition.addListener('start', () => {
-        if (isMountedRef.current) {
+        if (isMountedRef.current && isOwnerRef.current) {
           // A new session starts with an empty transcript.
           processedWordsRef.current = 0;
           setIsListening(true);
@@ -150,7 +167,7 @@ export function useContinuousVoiceAthletes({
         }
       }),
       SpeechRecognition.addListener('end', () => {
-        if (!isMountedRef.current) return;
+        if (!isMountedRef.current || !isOwnerRef.current) return;
         if (wantListeningRef.current && voiceAvailable) {
           try {
             beginRecognition();
@@ -159,14 +176,12 @@ export function useContinuousVoiceAthletes({
             // fall through and mark as stopped
           }
         }
+        isOwnerRef.current = false;
         setIsListening(false);
       }),
       SpeechRecognition.addListener('result', (event: any) => {
-        if (!isMountedRef.current || !event?.results?.length) return;
-        const phrase = event.results
-          .map((r: any) => r.transcript)
-          .join(' ')
-          .trim();
+        if (!isMountedRef.current || !isOwnerRef.current) return;
+        const phrase = bestTranscript(event);
         if (!phrase) return;
 
         setCurrentTranscript(phrase);
@@ -187,7 +202,7 @@ export function useContinuousVoiceAthletes({
         }
       }),
       SpeechRecognition.addListener('error', (event: any) => {
-        if (!isMountedRef.current) return;
+        if (!isMountedRef.current || !isOwnerRef.current) return;
         const raw = String(event?.error ?? '').toLowerCase();
         const isPermissionError =
           raw.includes('permission') || raw.includes('not-allowed');
@@ -200,6 +215,7 @@ export function useContinuousVoiceAthletes({
           raw.includes('service-not-allowed');
         if (isFatal) {
           wantListeningRef.current = false;
+          isOwnerRef.current = false;
           setError(`Voice error: ${event?.message || 'Please try again.'}`);
           setPermissionDenied(isPermissionError);
           setIsListening(false);
@@ -229,6 +245,7 @@ export function useContinuousVoiceAthletes({
         return;
       }
       wantListeningRef.current = true;
+      isOwnerRef.current = true;
       beginRecognition();
     } catch (e: any) {
       wantListeningRef.current = false;
