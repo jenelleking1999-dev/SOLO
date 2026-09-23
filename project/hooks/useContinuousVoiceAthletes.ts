@@ -28,36 +28,82 @@ if (!isExpoGo) {
   }
 }
 
-const capitalize = (str: string): string =>
-  str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+/** Levenshtein distance, used to absorb small recogniser slips. */
+function editDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
 
-const STOP_WORDS = [
-  'the', 'and', 'or', 'is', 'a', 'for', 'to', 'of', 'go', 'next',
-  'okay', 'ok', 'yeah', 'now', 'got', 'it', 'that', 'good', 'nice',
-];
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const curr = [i];
+    for (let j = 1; j <= b.length; j++) {
+      curr[j] = Math.min(
+        prev[j] + 1,
+        curr[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+    prev = curr;
+  }
+  return prev[b.length];
+}
 
 /**
- * Pull a single best athlete name out of a spoken phrase. Each tap corresponds
- * to one athlete, so we return at most one name.
+ * How far a heard word may stray from a roster name before we stop believing
+ * it. Short names get no slack at all — at three letters almost every English
+ * filler word is one edit away from something.
+ */
+function maxSlipFor(name: string): number {
+  const n = name.replace(/\s+/g, '').length;
+  if (n <= 3) return 0;
+  if (n <= 6) return 1;
+  return 2;
+}
+
+/**
+ * Match a spoken phrase against the group's roster and return the canonical
+ * athlete name, or null.
+ *
+ * Deliberately roster-only: a coach talks constantly during a rep ("run
+ * faster", "keep your arms down"), and none of it is an athlete name. Anything
+ * that isn't recognisably someone on this roster is ignored rather than
+ * guessed at, so coaching chatter can never be logged as an athlete.
  */
 function pickName(transcript: string, roster: string[]): string | null {
-  const lower = transcript.toLowerCase();
+  const tokens = transcript.toLowerCase().split(/[^a-z]+/i).filter(Boolean);
+  if (tokens.length === 0 || roster.length === 0) return null;
 
-  // Prefer a name already on the roster (use its canonical spelling).
-  for (const athlete of roster) {
-    const a = athlete.toLowerCase().trim();
-    if (a && lower.includes(a)) return athlete;
+  let best: { name: string; dist: number; len: number } | null = null;
+
+  for (const entry of roster) {
+    const full = entry.toLowerCase().replace(/[^a-z\s]/g, '').trim();
+    if (!full) continue;
+
+    const parts = full.split(/\s+/).filter((p) => p.length >= 2);
+    // Try the whole name ("marcus bell") and each part on its own ("marcus"),
+    // since a coach calling a split rarely uses the surname.
+    const candidates = parts.length > 1 ? [full, ...parts] : parts;
+
+    for (const cand of candidates) {
+      const width = cand.split(/\s+/).length;
+      const slack = maxSlipFor(cand);
+
+      for (let i = 0; i + width <= tokens.length; i++) {
+        const heard = tokens.slice(i, i + width).join(' ');
+        const dist = editDistance(heard, cand);
+        if (dist > slack) continue;
+
+        // Closest match wins; ties go to the longer candidate so a full-name
+        // hit beats a bare first-name hit.
+        if (!best || dist < best.dist || (dist === best.dist && cand.length > best.len)) {
+          best = { name: entry, dist, len: cand.length };
+        }
+      }
+    }
   }
 
-  // Otherwise take the last meaningful word as the name (people often lead with
-  // filler, e.g. "okay, Sarah").
-  const words = transcript
-    .split(/[\s,\-—–]+/)
-    .filter(
-      (w) => /^[a-zA-Z]+$/.test(w) && w.length > 2 && !STOP_WORDS.includes(w.toLowerCase())
-    );
-  if (words.length === 0) return null;
-  return capitalize(words[words.length - 1]);
+  return best ? best.name : null;
 }
 
 export interface UseVoiceAthleteNamesOptions {
