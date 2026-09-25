@@ -1,0 +1,104 @@
+<!--
+  Supabase "Confirm signup" email template for SOLO.
+  Paste into: Supabase dashboard → Authentication → Emails → Templates → Confirm signup
+  (both the development and production projects).
+  Subject line: Confirm your SOLO account
+
+  The logo is served from the production project's public "email-assets" storage
+  bucket; upload supabase/templates/solo-logo-email.png there first.
+-->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light only" />
+    <title>Confirm your SOLO account</title>
+  </head>
+  <body style="margin:0; padding:0; background-color:#f3f4f8; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f3f4f8;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px; background-color:#ffffff; border-radius:16px; overflow:hidden;">
+            <!-- Brand bar -->
+            <tr>
+              <td style="height:6px; background-color:#6366f1; background-image:linear-gradient(90deg,#050014,#4f46e5,#06b6d4); font-size:0; line-height:0;">&nbsp;</td>
+            </tr>
+
+            <!-- Logo + wordmark -->
+            <tr>
+              <td align="center" style="padding:36px 32px 8px;">
+                <img
+                  src="https://usewtyvncnqzeezgesbx.supabase.co/storage/v1/object/public/email-assets/solo-logo-email.png"
+                  width="88"
+                  height="88"
+                  alt="SOLO"
+                  style="display:block; width:88px; height:88px; border:0;"
+                />
+                <div style="margin-top:12px; font-size:22px; font-weight:700; letter-spacing:4px; color:#050014;">SOLO</div>
+              </td>
+            </tr>
+
+            <!-- Message -->
+            <tr>
+              <td style="padding:16px 32px 0; text-align:center;">
+                <h1 style="margin:0 0 12px; font-size:22px; line-height:30px; font-weight:700; color:#0a0a0a;">Confirm your email</h1>
+                <p style="margin:0; font-size:16px; line-height:24px; color:#4b5563;">
+                  Thanks for signing up for SOLO. Tap the button below to confirm
+                  <strong style="color:#0a0a0a;">{{ .Email }}</strong> and finish setting up your account.
+                </p>
+              </td>
+            </tr>
+
+            <!-- Button -->
+            <tr>
+              <td align="center" style="padding:28px 32px 8px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td align="center" bgcolor="#6366f1" style="border-radius:10px;">
+                      <a
+                        href="{{ .ConfirmationURL }}"
+                        target="_blank"
+                        style="display:inline-block; padding:14px 32px; font-size:16px; font-weight:600; color:#ffffff; text-decoration:none; border-radius:10px;"
+                      >Confirm my email</a>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Tip -->
+            <tr>
+              <td style="padding:12px 32px 0; text-align:center;">
+                <p style="margin:0; font-size:14px; line-height:20px; color:#6b7280;">
+                  Open this email on the phone where SOLO is installed. The button signs you in to the app.
+                </p>
+              </td>
+            </tr>
+
+            <!-- Fallback link -->
+            <tr>
+              <td style="padding:24px 32px 0;">
+                <p style="margin:0 0 6px; font-size:13px; line-height:18px; color:#6b7280;">Button not working? Copy and paste this link into your browser:</p>
+                <p style="margin:0; font-size:13px; line-height:18px; word-break:break-all;">
+                  <a href="{{ .ConfirmationURL }}" style="color:#4f46e5;">{{ .ConfirmationURL }}</a>
+                </p>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="padding:28px 32px 32px;">
+                <hr style="border:none; border-top:1px solid #e5e7eb; margin:0 0 20px;" />
+                <p style="margin:0; font-size:12px; line-height:18px; color:#9ca3af; text-align:center;">
+                  Didn't create a SOLO account? You can safely ignore this email.<br />
+                  Questions? Contact <a href="mailto:support@coachingsolo.io" style="color:#6b7280;">support@coachingsolo.io</a>
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

@@ -1,6 +1,33 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { Alert, Platform } from 'react-native';
+import * as Linking from 'expo-linking';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+
+/**
+ * Where Supabase sends the user after they tap a link in a verification or
+ * password-reset email. On native this deep-links back into the app (handled
+ * by `handleAuthDeepLink` below and the `app/auth-callback.tsx` route). Must be
+ * listed under Authentication → URL Configuration → Redirect URLs in BOTH
+ * Supabase projects, or Supabase falls back to the project's Site URL.
+ */
+function getAuthRedirectUrl(): string | undefined {
+  if (Platform.OS === 'web') {
+    return typeof window !== 'undefined' && window.location ? window.location.origin : undefined;
+  }
+  return 'coachingsolo://auth-callback';
+}
+
+/** Reads auth params from both the #fragment (implicit flow) and ?query of a deep link. */
+function parseAuthParams(url: string): URLSearchParams {
+  const params = new URLSearchParams();
+  const [beforeHash, hash = ''] = url.split('#');
+  const query = beforeHash.split('?')[1] ?? '';
+  for (const part of [query, hash]) {
+    new URLSearchParams(part).forEach((value, key) => params.set(key, value));
+  }
+  return params;
+}
 
 function detectRecoveryInHash(): boolean {
   // `window` exists on native but `window.location` may be undefined there, so
@@ -91,6 +118,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Native only: finish sign-in when the app is opened from an email link
+  // (coachingsolo://auth-callback#access_token=...&type=signup|recovery).
+  const handledAuthUrls = useRef(new Set<string>());
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    const handleAuthDeepLink = async (url: string | null) => {
+      if (!url || !url.includes('auth-callback') || handledAuthUrls.current.has(url)) return;
+      handledAuthUrls.current.add(url);
+
+      const params = parseAuthParams(url);
+      if (params.get('error')) {
+        Alert.alert(
+          'Link expired',
+          'This email link has expired or was already used. Try signing in, or request a new link.'
+        );
+        return;
+      }
+
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
+      if (!accessToken || !refreshToken) return;
+
+      const { error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+      if (error) return;
+
+      if (params.get('type') === 'recovery') {
+        setIsPasswordRecovery(true);
+      }
+    };
+
+    Linking.getInitialURL().then(handleAuthDeepLink);
+    const linkSubscription = Linking.addEventListener('url', ({ url }) => handleAuthDeepLink(url));
+    return () => linkSubscription.remove();
+  }, []);
+
   const clearPasswordRecovery = () => {
     setIsPasswordRecovery(false);
   };
@@ -108,6 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
       password,
+      options: { emailRedirectTo: getAuthRedirectUrl() },
     });
     if (error) throw error;
 
@@ -131,7 +198,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const resetPassword = async (email: string) => {
     const { error } = await supabase.auth.resetPasswordForEmail(
-      email.trim().toLowerCase()
+      email.trim().toLowerCase(),
+      { redirectTo: getAuthRedirectUrl() }
     );
     if (error) throw error;
   };
