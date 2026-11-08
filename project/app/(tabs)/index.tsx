@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,16 +11,29 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import { Play, PenLine, X, Sparkles, RotateCcw, Plus, Trash2 } from 'lucide-react-native';
+import { useRouter, useFocusEffect } from 'expo-router';
+import {
+  Play,
+  PenLine,
+  X,
+  Sparkles,
+  RotateCcw,
+  Plus,
+  Trash2,
+  CalendarCheck,
+} from 'lucide-react-native';
 import { colors, spacing, typography } from '@/constants/theme';
 import { parseWorkoutText, ParsedWorkout } from '@/utils/workoutParser';
-import { WorkoutSegment } from '@/types/database';
+import { ScheduledWorkout, WorkoutSegment } from '@/types/database';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useVoiceWorkout } from '@/hooks/useVoiceWorkout';
+import { useScheduledWorkouts } from '@/hooks/useScheduledWorkouts';
 import { VoiceInputButton } from '@/components/VoiceInputButton';
 import { VoiceFeedback } from '@/components/VoiceFeedback';
+import { ScheduleCalendar } from '@/components/ScheduleCalendar';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { fromDateKey, todayKey, toDateKey, formatShortDate } from '@/utils/calendarDates';
 
 /**
  * A numeric text field that can be fully cleared while editing. Empty input is
@@ -77,6 +90,97 @@ export default function HomeScreen() {
   const { user } = useAuth();
   const parsedWorkoutRef = useRef<ParsedWorkout | null>(null);
   const voiceInput = useVoiceWorkout();
+  const scrollRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
+
+  // Calendar: the visible month, the tapped day, and — while planning — the
+  // date the workout in the builder will be saved to (instead of started).
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [selectedDate, setSelectedDate] = useState(todayKey);
+  const [planDate, setPlanDate] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ScheduledWorkout | null>(null);
+  const schedule = useScheduledWorkouts(user?.id, calendarMonth);
+
+  // Pick up changes made elsewhere (e.g. on another phone) when returning to
+  // Home. Month changes already reload inside the hook, so this only runs on focus.
+  const refreshScheduleRef = useRef(schedule.refresh);
+  refreshScheduleRef.current = schedule.refresh;
+  useFocusEffect(
+    useCallback(() => {
+      refreshScheduleRef.current();
+    }, [])
+  );
+
+  const clearBuilder = () => {
+    setWorkoutText('');
+    parsedWorkoutRef.current = null;
+    setParsedWorkout(null);
+    setEditedWorkout(null);
+    setIsEditing(false);
+    setStartError(null);
+  };
+
+  const handleChangeMonth = (month: Date) => {
+    setCalendarMonth(month);
+    const today = todayKey();
+    const isCurrentMonth = today.startsWith(toDateKey(month).slice(0, 7));
+    setSelectedDate(isCurrentMonth ? today : toDateKey(month));
+  };
+
+  const handlePlan = (date: string) => {
+    setPlanDate(date);
+    setStartError(null);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+    if (!parsedWorkout) setTimeout(() => inputRef.current?.focus(), 300);
+  };
+
+  const handleSaveScheduled = async () => {
+    const currentWorkout = parsedWorkoutRef.current ?? parsedWorkout;
+    if (!currentWorkout || !planDate) return;
+    setLoading(true);
+    try {
+      await schedule.addScheduled(planDate, currentWorkout, workoutText);
+      const saved = planDate;
+      clearBuilder();
+      setPlanDate(null);
+      const savedDay = fromDateKey(saved);
+      setCalendarMonth(new Date(savedDay.getFullYear(), savedDay.getMonth(), 1));
+      setSelectedDate(saved);
+      Alert.alert('Workout scheduled', `Saved to ${formatShortDate(saved)}.`);
+    } catch (error: any) {
+      console.error('Schedule workout failed:', error);
+      setStartError(error?.message || 'Could not save the workout. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLoadScheduled = (item: ScheduledWorkout) => {
+    const workout = item.workout as ParsedWorkout;
+    setPlanDate(null);
+    setWorkoutText(item.workout_text ?? '');
+    parsedWorkoutRef.current = workout;
+    setParsedWorkout(workout);
+    setEditedWorkout(workout);
+    setIsEditing(false);
+    setStartError(null);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    try {
+      await schedule.removeScheduled(target.id);
+    } catch (error) {
+      console.error('Delete scheduled workout failed:', error);
+      Alert.alert('Could not delete', 'Please check your connection and try again.');
+    }
+  };
 
   const handleParseWorkout = () => {
     if (!workoutText.trim()) return;
@@ -234,7 +338,12 @@ export default function HomeScreen() {
       colors={[colors.dark.backgroundGradientStart, colors.dark.backgroundGradientEnd]}
       style={styles.container}
     >
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.header}>
           <Image
             source={require('@/assets/images/solo_logo-removebg-preview.png')}
@@ -245,8 +354,25 @@ export default function HomeScreen() {
           <Text style={styles.tagline}>Conditioning Starts Here</Text>
         </View>
 
+        {planDate && (
+          <View style={styles.planBanner}>
+            <CalendarCheck size={18} color={colors.dark.accent} />
+            <Text style={styles.planBannerText}>
+              Planning for {planDate === todayKey() ? 'today' : formatShortDate(planDate)}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setPlanDate(null)}
+              style={styles.planBannerClose}
+              accessibilityLabel="Stop planning"
+            >
+              <X size={18} color={colors.dark.textSecondary} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.inputContainer}>
           <TextInput
+            ref={inputRef}
             style={styles.input}
             placeholder="Type a workout or use voice..."
             placeholderTextColor={colors.dark.textSecondary}
@@ -370,23 +496,43 @@ export default function HomeScreen() {
               </View>
             )}
 
-            <TouchableOpacity
-              style={styles.startButton}
-              onPress={handleStartWorkout}
-              disabled={loading}
-            >
-              <LinearGradient
-                colors={[colors.dark.primary, colors.dark.secondary]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.startButtonGradient}
+            {planDate ? (
+              <TouchableOpacity
+                style={styles.startButton}
+                onPress={handleSaveScheduled}
+                disabled={loading}
               >
-                <Play size={24} color="#ffffff" fill="#ffffff" />
-                <Text style={styles.startButtonText}>
-                  {loading ? 'Starting...' : 'Start Workout'}
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity>
+                <LinearGradient
+                  colors={[colors.dark.primary, colors.dark.secondary]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.startButtonGradient}
+                >
+                  <CalendarCheck size={22} color="#ffffff" />
+                  <Text style={styles.startButtonText}>
+                    {loading ? 'Saving...' : `Save to ${formatShortDate(planDate)}`}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.startButton}
+                onPress={handleStartWorkout}
+                disabled={loading}
+              >
+                <LinearGradient
+                  colors={[colors.dark.primary, colors.dark.secondary]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.startButtonGradient}
+                >
+                  <Play size={24} color="#ffffff" fill="#ffffff" />
+                  <Text style={styles.startButtonText}>
+                    {loading ? 'Starting...' : 'Start Workout'}
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -490,45 +636,36 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <View style={styles.examples}>
-          <Text style={styles.examplesTitle}>Try an Example</Text>
-          <TouchableOpacity
-            style={styles.exampleCard}
-            onPress={() =>
-              setWorkoutText(
-                '2 100m at 15 seconds, 30 seconds rest, 3 50m at 10 seconds, 30 seconds rest, 2 groups of 2 athletes'
-              )
-            }
-          >
-            <View style={styles.exampleContent}>
-              <Text style={styles.exampleMainText}>2x 100m + 3x 50m</Text>
-              <Text style={styles.exampleSubText}>Multi-segment • 2 groups of 2</Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.exampleCard}
-            onPress={() =>
-              setWorkoutText(
-                'Four 100m dashes at 15 seconds each with 45 seconds rest in between'
-              )
-            }
-          >
-            <View style={styles.exampleContent}>
-              <Text style={styles.exampleMainText}>4x 100m Dashes</Text>
-              <Text style={styles.exampleSubText}>15s target • 45s rest</Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.exampleCard}
-            onPress={() => setWorkoutText('8x 200m at 30 seconds with 60 seconds rest')}
-          >
-            <View style={styles.exampleContent}>
-              <Text style={styles.exampleMainText}>8x 200m Sprints</Text>
-              <Text style={styles.exampleSubText}>30s target • 60s rest</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
+        <ScheduleCalendar
+          signedIn={!!user}
+          month={calendarMonth}
+          selectedDate={selectedDate}
+          scheduled={schedule.scheduled}
+          loading={schedule.loading}
+          error={schedule.error}
+          onChangeMonth={handleChangeMonth}
+          onSelectDate={setSelectedDate}
+          onPlan={handlePlan}
+          onLoad={handleLoadScheduled}
+          onDelete={setDeleteTarget}
+          onRetry={schedule.refresh}
+          onSignIn={() => router.push('/auth')}
+        />
       </ScrollView>
+
+      <ConfirmDialog
+        visible={!!deleteTarget}
+        title="Delete scheduled workout?"
+        message={
+          deleteTarget
+            ? `"${deleteTarget.name}" will be removed from ${formatShortDate(deleteTarget.scheduled_date)}.`
+            : ''
+        }
+        confirmLabel="Delete"
+        destructive
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </LinearGradient>
   );
 }
@@ -836,37 +973,27 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     fontWeight: typography.fontWeight.bold,
   },
-  examples: {
-    marginTop: spacing.xl,
-  },
-  examplesTitle: {
-    fontSize: typography.fontSize.lg,
-    fontFamily: typography.fontFamily.semibold,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.dark.text,
-    marginBottom: spacing.md,
-  },
-  exampleCard: {
-    backgroundColor: colors.dark.cardGlass,
-    borderRadius: 16,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+  planBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: 'rgba(6, 182, 212, 0.1)',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.dark.borderLight,
+    borderColor: 'rgba(6, 182, 212, 0.4)',
+    paddingVertical: spacing.sm,
+    paddingLeft: spacing.md,
+    marginBottom: spacing.md,
   },
-  exampleContent: {
-    flexDirection: 'column',
-  },
-  exampleMainText: {
-    fontSize: typography.fontSize.base,
+  planBannerText: {
+    flex: 1,
+    fontSize: typography.fontSize.sm,
     fontFamily: typography.fontFamily.semibold,
     fontWeight: typography.fontWeight.semibold,
     color: colors.dark.text,
-    marginBottom: spacing.xs,
   },
-  exampleSubText: {
-    fontSize: typography.fontSize.sm,
-    fontFamily: typography.fontFamily.regular,
-    color: colors.dark.textSecondary,
+  planBannerClose: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
   },
 });

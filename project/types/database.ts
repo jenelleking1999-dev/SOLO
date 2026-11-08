@@ -28,6 +28,29 @@ export type Workout = {
   created_at: string;
 }
 
+/** A workout a coach planned for a future date on the Home screen calendar. */
+export type ScheduledWorkout = {
+  id: string;
+  user_id: string;
+  /** Local calendar date, 'YYYY-MM-DD'. */
+  scheduled_date: string;
+  name: string;
+  workout_text: string | null;
+  /** The generated workout (a ParsedWorkout from utils/workoutParser). */
+  workout: {
+    name: string;
+    reps: number;
+    distance: string;
+    target_time: number;
+    rest_time: number;
+    group_count: number;
+    athletes_per_group: number;
+    tags: string[];
+    segments: WorkoutSegment[];
+  };
+  created_at: string;
+}
+
 export type Session = {
   id: string;
   workout_id: string;
@@ -105,6 +128,12 @@ export type Database = {
         Row: Workout;
         Insert: Omit<Workout, 'id' | 'created_at'>;
         Update: Partial<Omit<Workout, 'id' | 'created_at'>>;
+        Relationships: [];
+      };
+      scheduled_workouts: {
+        Row: ScheduledWorkout;
+        Insert: Omit<ScheduledWorkout, 'id' | 'created_at'>;
+        Update: Partial<Omit<ScheduledWorkout, 'id' | 'created_at'>>;
         Relationships: [];
       };
       sessions: {
