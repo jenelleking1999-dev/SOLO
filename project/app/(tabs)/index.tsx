@@ -33,6 +33,7 @@ import { VoiceInputButton } from '@/components/VoiceInputButton';
 import { VoiceFeedback } from '@/components/VoiceFeedback';
 import { ScheduleCalendar } from '@/components/ScheduleCalendar';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { ViewerHome } from '@/components/ViewerHome';
 import { fromDateKey, todayKey, toDateKey, formatShortDate } from '@/utils/calendarDates';
 
 /**
@@ -80,6 +81,13 @@ function NumberInput({
 }
 
 export default function HomeScreen() {
+  const { user, isCoach } = useAuth();
+  // Athletes and parents only view times; coaches (and signed-out guests) run workouts.
+  if (user && !isCoach) return <ViewerHome />;
+  return <CoachHome />;
+}
+
+function CoachHome() {
   const [workoutText, setWorkoutText] = useState('');
   const [parsedWorkout, setParsedWorkout] = useState<ParsedWorkout | null>(null);
   const [loading, setLoading] = useState(false);

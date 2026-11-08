@@ -15,7 +15,7 @@ import { colors, spacing, typography } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function ProfileScreen() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, role, isCoach } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
@@ -79,34 +79,41 @@ export default function ProfileScreen() {
             <User size={48} color={colors.dark.text} />
           </View>
           <Text style={styles.email}>{user.email}</Text>
+          <Text style={styles.roleBadge}>
+            {role === 'coach' ? 'Coach' : role === 'athlete' ? 'Athlete' : 'Parent'} account
+          </Text>
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => router.push('/workout-history')}
-          >
-            <View style={styles.menuItemLeft}>
-              <View style={styles.menuIconWrap}>
-                <Clock size={18} color={colors.dark.primary} />
-              </View>
-              <Text style={styles.menuItemText}>Workout History</Text>
-            </View>
-            <ChevronRight size={18} color={colors.dark.textSecondary} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => router.push('/manage-athletes')}
-          >
-            <View style={styles.menuItemLeft}>
-              <View style={styles.menuIconWrap}>
-                <Users size={18} color={colors.dark.primary} />
-              </View>
-              <Text style={styles.menuItemText}>Manage Athletes</Text>
-            </View>
-            <ChevronRight size={18} color={colors.dark.textSecondary} />
-          </TouchableOpacity>
+          {isCoach && (
+            <>
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => router.push('/workout-history')}
+              >
+                <View style={styles.menuItemLeft}>
+                  <View style={styles.menuIconWrap}>
+                    <Clock size={18} color={colors.dark.primary} />
+                  </View>
+                  <Text style={styles.menuItemText}>Workout History</Text>
+                </View>
+                <ChevronRight size={18} color={colors.dark.textSecondary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => router.push('/manage-athletes')}
+              >
+                <View style={styles.menuItemLeft}>
+                  <View style={styles.menuIconWrap}>
+                    <Users size={18} color={colors.dark.primary} />
+                  </View>
+                  <Text style={styles.menuItemText}>Manage Athletes</Text>
+                </View>
+                <ChevronRight size={18} color={colors.dark.textSecondary} />
+              </TouchableOpacity>
+            </>
+          )}
           <TouchableOpacity
             style={styles.menuItem}
             onPress={() => router.push('/settings')}
@@ -265,6 +272,12 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.lg,
     fontFamily: typography.fontFamily.regular,
     color: colors.dark.text,
+  },
+  roleBadge: {
+    marginTop: spacing.xs,
+    fontSize: typography.fontSize.sm,
+    fontFamily: typography.fontFamily.medium,
+    color: colors.dark.textSecondary,
   },
   section: {
     marginBottom: spacing.lg,

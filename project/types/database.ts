@@ -1,9 +1,73 @@
+export type AccountRole = 'coach' | 'athlete' | 'parent';
+
 export type Profile = {
   id: string;
   email: string | null;
   full_name: string | null;
+  role: AccountRole;
   created_at: string;
   updated_at: string;
+}
+
+/** Who an invite / link gives access to the athlete's marks. */
+export type AthleteRelationship = 'athlete' | 'parent';
+
+/** A one-time code a coach creates so an athlete or parent can connect. */
+export type AthleteInvite = {
+  id: string;
+  code: string;
+  coach_id: string;
+  athlete_name: string;
+  relationship: AthleteRelationship;
+  created_at: string;
+  expires_at: string;
+  redeemed_by: string | null;
+  redeemed_at: string | null;
+}
+
+/** An athlete/parent account connected to one of a coach's athletes. */
+export type AthleteLink = {
+  id: string;
+  coach_id: string;
+  athlete_name: string;
+  user_id: string;
+  relationship: AthleteRelationship;
+  created_at: string;
+}
+
+/** Row from get_my_linked_athletes(). */
+export type LinkedAthlete = {
+  link_id: string;
+  athlete_name: string;
+  coach_name: string;
+  relationship: AthleteRelationship;
+  linked_at: string;
+}
+
+/** Row from get_linked_athlete_history(): one recorded mark, read-only. */
+export type LinkedAthleteMark = {
+  id: string;
+  athlete_name: string;
+  session_id: string;
+  workout_id: string;
+  group_id: string | null;
+  group_label: string | null;
+  workout_name: string | null;
+  distance: string;
+  rep_number: number;
+  segment_index: number;
+  time_ms: number;
+  target_time_s: number | null;
+  recorded_at: string;
+}
+
+/** Row from get_athlete_connections(): who can view a coach's athlete. */
+export type AthleteConnection = {
+  link_id: string;
+  viewer_name: string | null;
+  viewer_email: string | null;
+  relationship: AthleteRelationship;
+  linked_at: string;
 }
 
 export type WorkoutSegment = {
@@ -160,6 +224,18 @@ export type Database = {
         Update: Partial<Omit<Athlete, 'id' | 'created_at'>>;
         Relationships: [];
       };
+      athlete_invites: {
+        Row: AthleteInvite;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      athlete_links: {
+        Row: AthleteLink;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       athlete_splits: {
         Row: AthleteSplit;
         Insert: Omit<AthleteSplit, 'id' | 'created_at'>;
@@ -168,7 +244,33 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      create_athlete_invite: {
+        Args: { p_athlete_name: string; p_relationship: AthleteRelationship };
+        Returns: { code: string; expires_at: string }[];
+      };
+      redeem_athlete_invite: {
+        Args: { p_code: string };
+        Returns: {
+          link_id: string;
+          athlete_name: string;
+          coach_name: string;
+          relationship: AthleteRelationship;
+        }[];
+      };
+      get_my_linked_athletes: {
+        Args: Record<string, never>;
+        Returns: LinkedAthlete[];
+      };
+      get_linked_athlete_history: {
+        Args: { p_link_id: string };
+        Returns: LinkedAthleteMark[];
+      };
+      get_athlete_connections: {
+        Args: { p_athlete_name: string };
+        Returns: AthleteConnection[];
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

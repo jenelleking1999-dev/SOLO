@@ -13,9 +13,28 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { ArrowLeft, SquareCheck as CheckSquare, Square } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  SquareCheck as CheckSquare,
+  Square,
+  Timer,
+  PersonStanding,
+  Users,
+} from 'lucide-react-native';
 import { colors, spacing, typography } from '@/constants/theme';
 import { useAuth } from '@/contexts/AuthContext';
+import { AccountRole } from '@/types/database';
+
+const ROLE_OPTIONS: {
+  role: AccountRole;
+  label: string;
+  description: string;
+  Icon: typeof Timer;
+}[] = [
+  { role: 'coach', label: 'Coach', description: 'Run workouts and record times', Icon: Timer },
+  { role: 'athlete', label: 'Athlete', description: 'View your times from your coach', Icon: PersonStanding },
+  { role: 'parent', label: 'Parent', description: "View your child's times", Icon: Users },
+];
 
 const TERMS_URL = 'https://sites.google.com/coachingsolo.io/solo/terms-conditions?authuser=0';
 const PRIVACY_URL = 'https://sites.google.com/coachingsolo.io/solo/privacy-policy?authuser=0';
@@ -28,6 +47,12 @@ export default function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [accountRole, setAccountRole] = useState<AccountRole | null>(null);
+  const [confirmedAge, setConfirmedAge] = useState(false);
+  // Athletes under 13 must be added through a parent account instead.
+  const needsAgeConfirmation = accountRole === 'athlete';
+  const canSubmitSignUp =
+    agreedToTerms && accountRole !== null && (!needsAgeConfirmation || confirmedAge);
   const router = useRouter();
   const { signIn, signUp } = useAuth();
 
@@ -50,7 +75,11 @@ export default function AuthScreen() {
 
     try {
       if (isSignUp) {
-        await signUp(email, password, fullName);
+        if (!accountRole) {
+          setError('Choose whether you are a coach, athlete or parent');
+          return;
+        }
+        await signUp(email, password, fullName, accountRole);
       } else {
         await signIn(email, password);
       }
@@ -93,13 +122,46 @@ export default function AuthScreen() {
           </Text>
           <Text style={styles.formSubtitle}>
             {isSignUp
-              ? 'Sign up to save your workouts'
+              ? 'Create your SOLO account'
               : 'Sign in to continue'}
           </Text>
 
           {error && (
             <View style={styles.errorContainer}>
               <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+
+          {isSignUp && (
+            <View style={styles.roleSection}>
+              <Text style={styles.roleQuestion}>I am a…</Text>
+              {ROLE_OPTIONS.map(({ role: option, label, description, Icon }) => {
+                const selected = accountRole === option;
+                return (
+                  <TouchableOpacity
+                    key={option}
+                    style={[styles.roleOption, selected && styles.roleOptionSelected]}
+                    onPress={() => {
+                      setAccountRole(option);
+                      setError('');
+                    }}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                  >
+                    <Icon size={22} color={selected ? '#ffffff' : colors.dark.primaryLight} />
+                    <View style={styles.roleTextWrap}>
+                      <Text style={styles.roleLabel}>{label}</Text>
+                      <Text style={styles.roleDescription}>{description}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+              {accountRole && accountRole !== 'coach' && (
+                <Text style={styles.roleHint}>
+                  After signing up, enter the invite code from your coach to see{' '}
+                  {accountRole === 'parent' ? "your child's" : 'your'} times.
+                </Text>
+              )}
             </View>
           )}
 
@@ -172,20 +234,36 @@ export default function AuthScreen() {
                   </Text>
                 </Text>
               </TouchableOpacity>
+              {needsAgeConfirmation && (
+                <TouchableOpacity
+                  style={[styles.checkboxRow, styles.ageRow]}
+                  onPress={() => setConfirmedAge(!confirmedAge)}
+                  activeOpacity={0.7}
+                >
+                  {confirmedAge ? (
+                    <CheckSquare size={20} color={colors.dark.primary} />
+                  ) : (
+                    <Square size={20} color={colors.dark.textSecondary} />
+                  )}
+                  <Text style={styles.termsText}>
+                    I am 13 or older. (Under 13? Ask a parent to create a Parent account instead.)
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
 
           <TouchableOpacity
             style={[
               styles.submitButton,
-              (isSignUp && !agreedToTerms) && styles.submitButtonDisabled,
+              (isSignUp && !canSubmitSignUp) && styles.submitButtonDisabled,
             ]}
             onPress={handleAuth}
-            disabled={loading || (isSignUp && !agreedToTerms)}
+            disabled={loading || (isSignUp && !canSubmitSignUp)}
           >
             <LinearGradient
               colors={
-                (isSignUp && !agreedToTerms)
+                (isSignUp && !canSubmitSignUp)
                   ? [colors.dark.textTertiary, colors.dark.textTertiary]
                   : [colors.dark.primary, colors.dark.secondary]
               }
@@ -352,6 +430,55 @@ const styles = StyleSheet.create({
   },
   submitButtonDisabled: {
     opacity: 0.5,
+  },
+  roleSection: {
+    marginBottom: spacing.md,
+  },
+  roleQuestion: {
+    fontSize: typography.fontSize.base,
+    fontFamily: typography.fontFamily.semibold,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.dark.text,
+    marginBottom: spacing.sm,
+  },
+  roleOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.dark.borderLight,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    marginBottom: spacing.sm,
+  },
+  roleOptionSelected: {
+    borderColor: colors.dark.primary,
+    backgroundColor: 'rgba(99, 102, 241, 0.25)',
+  },
+  roleTextWrap: {
+    flex: 1,
+  },
+  roleLabel: {
+    fontSize: typography.fontSize.base,
+    fontFamily: typography.fontFamily.semibold,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.dark.text,
+  },
+  roleDescription: {
+    fontSize: typography.fontSize.sm,
+    fontFamily: typography.fontFamily.regular,
+    color: colors.dark.textSecondary,
+    marginTop: 2,
+  },
+  roleHint: {
+    fontSize: typography.fontSize.sm,
+    fontFamily: typography.fontFamily.regular,
+    color: colors.dark.textSecondary,
+    marginTop: spacing.xs,
+  },
+  ageRow: {
+    marginTop: spacing.sm,
   },
   switchButton: {
     marginTop: spacing.lg,

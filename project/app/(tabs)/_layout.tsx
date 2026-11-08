@@ -1,8 +1,14 @@
 import { Tabs } from 'expo-router';
 import { House as Home, User, ChartBar } from 'lucide-react-native';
 import { colors } from '@/constants/theme';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function TabLayout() {
+  const { user, isCoach } = useAuth();
+  // Results shows the coach's live session results; athletes and parents see
+  // their times from the Home screen instead.
+  const showResults = !user || isCoach;
+
   return (
     <Tabs
       screenOptions={{
@@ -26,6 +32,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="results"
         options={{
+          href: showResults ? undefined : null,
           title: 'Results',
           tabBarIcon: ({ size, color }) => <ChartBar size={size} color={color} />,
         }}

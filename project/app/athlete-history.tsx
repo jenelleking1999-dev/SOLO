@@ -23,6 +23,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AuthGuard } from '@/components/AuthGuard';
 import { formatTime, calculateAverage } from '@/utils/workoutParser';
 import { AthleteSplit, WorkoutSegment } from '@/types/database';
+import { getLinkedAthleteHistory } from '@/lib/athleteAccess';
+import { AthleteAccessCard } from '@/components/AthleteAccessCard';
 import { exportAllWorkoutsToExcel, downloadExcelFile } from '@/utils/excelExport';
 import { ENABLE_DOWNLOAD } from '@/constants/features';
 
@@ -45,9 +47,12 @@ export default function AthleteHistoryScreenWrapper() {
 }
 
 function AthleteHistoryScreen() {
-  const { athleteName } = useLocalSearchParams<{ athleteName: string }>();
+  // With `linkId`, an athlete/parent is viewing (read-only) through their link
+  // to the coach; without it, the coach is viewing their own athlete.
+  const { athleteName, linkId } = useLocalSearchParams<{ athleteName: string; linkId?: string }>();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isCoach } = useAuth();
+  const isViewer = !!linkId;
 
   const goBack = () => {
     if (router.canGoBack()) {
@@ -72,6 +77,13 @@ function AthleteHistoryScreen() {
       return;
     }
     setLoading(true);
+
+    if (isViewer) {
+      await loadLinkedHistory(linkId!);
+      setLoading(false);
+      return;
+    }
+
     const { data } = await supabase
       .from('athlete_splits')
       .select('*')
@@ -137,6 +149,45 @@ function AthleteHistoryScreen() {
     }
 
     setLoading(false);
+  };
+
+  /**
+   * Athlete/parent view: the database returns only completed-session marks for
+   * this link, each with its segment's target time.
+   */
+  const loadLinkedHistory = async (id: string) => {
+    try {
+      const marks = await getLinkedAthleteHistory(id);
+      setSplits(
+        marks.map((m) => ({
+          id: m.id,
+          athlete_name: m.athlete_name,
+          split_id: m.id,
+          session_id: m.session_id,
+          workout_id: m.workout_id,
+          user_id: null,
+          rep_number: m.rep_number,
+          time_ms: m.time_ms,
+          distance: m.distance,
+          group_number: null,
+          group_id: m.group_id,
+          group_label: m.group_label,
+          workout_name: m.workout_name,
+          segment_index: m.segment_index,
+          recorded_at: m.recorded_at,
+          created_at: m.recorded_at,
+        }))
+      );
+      const eligible = marks.filter((m) => (m.target_time_s ?? 0) > 0);
+      const successful = eligible.filter((m) => m.time_ms <= Number(m.target_time_s) * 1000);
+      setSuccessRate(
+        eligible.length > 0 ? Math.round((successful.length / eligible.length) * 100) : null
+      );
+    } catch (error) {
+      console.error('Load linked athlete history failed:', error);
+      setSplits([]);
+      setSuccessRate(null);
+    }
   };
 
   const getStats = () => {
@@ -249,6 +300,8 @@ function AthleteHistoryScreen() {
             </Text>
           </View>
         )}
+
+        {!isViewer && isCoach && athleteName ? <AthleteAccessCard athleteName={athleteName} /> : null}
 
         {sessionGroups.length > 0 && (
           <View>

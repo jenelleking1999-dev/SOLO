@@ -2,6 +2,11 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { Alert, Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 import { Session, User } from '@supabase/supabase-js';
+import { AccountRole } from '@/types/database';
+
+function isAccountRole(value: unknown): value is AccountRole {
+  return value === 'coach' || value === 'athlete' || value === 'parent';
+}
 import { supabase } from '@/lib/supabase';
 
 /**
@@ -47,8 +52,16 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   isPasswordRecovery: boolean;
+  /** 'coach' for every account created before roles existed. */
+  role: AccountRole;
+  isCoach: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, fullName?: string) => Promise<void>;
+  signUp: (
+    email: string,
+    password: string,
+    fullName: string | undefined,
+    role: AccountRole
+  ) => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
@@ -62,6 +75,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(detectRecoveryInHash);
+  const [profileRole, setProfileRole] = useState<AccountRole | null>(null);
+
+  // The role saved at sign-up is available instantly from the session; the
+  // profiles table is the source of truth and is loaded right after.
+  const metadataRole = user?.user_metadata?.role;
+  const role: AccountRole = profileRole ?? (isAccountRole(metadataRole) ? metadataRole : 'coach');
+
+  useEffect(() => {
+    if (!user) {
+      setProfileRole(null);
+      return;
+    }
+    let cancelled = false;
+    supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled && data && isAccountRole(data.role)) setProfileRole(data.role);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
   const expectingRecoveryEvent = useRef(detectRecoveryInHash());
 
   useEffect(() => {
@@ -169,25 +207,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
-  const signUp = async (email: string, password: string, fullName?: string) => {
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName: string | undefined,
+    accountRole: AccountRole
+  ) => {
     const normalizedEmail = email.trim().toLowerCase();
+    // The profile row (name + role) is created by the on_auth_user_created
+    // database trigger from this metadata, so it exists even before the email
+    // is confirmed.
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
       password,
-      options: { emailRedirectTo: getAuthRedirectUrl() },
+      options: {
+        emailRedirectTo: getAuthRedirectUrl(),
+        data: { full_name: fullName?.trim() || null, role: accountRole },
+      },
     });
     if (error) throw error;
 
     if (data.user && (!data.user.identities || data.user.identities.length === 0)) {
       throw new Error('An account with this email already exists. Please sign in instead.');
-    }
-
-    if (data.user && fullName) {
-      await supabase.from('profiles').insert({
-        id: data.user.id,
-        email: data.user.email,
-        full_name: fullName,
-      } as any);
     }
   };
 
@@ -216,6 +257,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         loading,
         isPasswordRecovery,
+        role,
+        isCoach: role === 'coach',
         signIn,
         signUp,
         signOut,
