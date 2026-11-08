@@ -8,6 +8,27 @@ import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { supabaseConfigError } from '@/lib/supabase';
 import { colors } from '@/constants/theme';
+import * as Sentry from '@sentry/react-native';
+
+Sentry.init({
+  dsn: 'https://15c2246865981e004ee378ca4195f72c@o4512145163485184.ingest.us.sentry.io/4512145186226176',
+
+  // Only report from installed builds; errors while running `npx expo start` stay local.
+  enabled: !__DEV__,
+  // Separates preview-build errors from real users' in Sentry. Set per profile in eas.json.
+  environment: process.env.EXPO_PUBLIC_APP_ENV ?? 'production',
+
+  // Never send IP addresses or user details: the app holds athlete names.
+  sendDefaultPii: false,
+
+  enableLogs: true,
+
+  // Session Replay only records the moments around an error (never random sessions),
+  // with all text, images and webviews masked.
+  replaysSessionSampleRate: 0,
+  replaysOnErrorSampleRate: 1,
+  integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
+});
 
 if (Platform.OS === 'web') {
   const style = document.createElement('style');
@@ -25,6 +46,10 @@ SplashScreen.preventAutoHideAsync().catch(() => {
  * expo-router automatically wraps the app with this export.
  */
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  useEffect(() => {
+    Sentry.captureException(error);
+  }, [error]);
+
   return (
     <View style={fallbackStyles.container}>
       <Text style={fallbackStyles.title}>Something went wrong</Text>
@@ -168,7 +193,7 @@ const recoveryStyles = StyleSheet.create({
   },
 });
 
-export default function RootLayout() {
+export default Sentry.wrap(function RootLayout() {
   useFrameworkReady();
 
   const [fontsLoaded, fontError] = useFonts({
@@ -214,4 +239,4 @@ export default function RootLayout() {
       </PasswordRecoveryHandler>
     </AuthProvider>
   );
-}
+});

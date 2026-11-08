@@ -58,7 +58,15 @@
         }
       ],
       "./plugins/withOptionalMicrophone.js",
-      "expo-asset"
+      "expo-asset",
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "project": "react-native",
+          "organization": "jenelle-king"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
