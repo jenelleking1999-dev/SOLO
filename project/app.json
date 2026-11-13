@@ -2,7 +2,7 @@
   "expo": {
     "name": "CoachingSolo",
     "slug": "bolt-expo-nativewind",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "coachingsolo",
@@ -29,7 +29,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "io.coachingsolo.app",
-      "buildNumber": "11",
+      "buildNumber": "12",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "We need microphone access to record your workout descriptions using voice input.",
         "NSSpeechRecognitionUsageDescription": "Speech recognition is used to transcribe your spoken workout descriptions and athlete names into text.",
