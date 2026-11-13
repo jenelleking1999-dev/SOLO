@@ -106,6 +106,42 @@ function pickName(transcript: string, roster: string[]): string | null {
   return best ? best.name : null;
 }
 
+/**
+ * Every roster athlete mentioned anywhere in a sentence, using the same
+ * tolerance rules as pickName. Used for coach notes ("Alex and Sam ran well
+ * today"), where a note can be about more than one athlete.
+ */
+export function findRosterNames(text: string, roster: string[]): string[] {
+  const tokens = text.toLowerCase().split(/[^a-z]+/i).filter(Boolean);
+  if (tokens.length === 0) return [];
+
+  return roster.filter((entry) => {
+    const full = entry.toLowerCase().replace(/[^a-z\s]/g, '').trim();
+    if (!full) return false;
+    const parts = full.split(/\s+/).filter((p) => p.length >= 2);
+    // Full name and first name tolerate small mishearings; a surname alone
+    // must be exact, because notes are ordinary sentences and surnames are
+    // often one letter from an everyday word ("well" vs Bell).
+    const candidates: { cand: string; exact: boolean }[] =
+      parts.length > 1
+        ? [
+            { cand: full, exact: false },
+            { cand: parts[0], exact: false },
+            ...parts.slice(1).map((p) => ({ cand: p, exact: true })),
+          ]
+        : parts.map((p) => ({ cand: p, exact: false }));
+
+    return candidates.some(({ cand, exact }) => {
+      const width = cand.split(/\s+/).length;
+      const slack = exact ? 0 : maxSlipFor(cand);
+      for (let i = 0; i + width <= tokens.length; i++) {
+        if (editDistance(tokens.slice(i, i + width).join(' '), cand) <= slack) return true;
+      }
+      return false;
+    });
+  });
+}
+
 export interface UseVoiceAthleteNamesOptions {
   existingAthletes: string[];
   onNameRecognized: (name: string) => void;

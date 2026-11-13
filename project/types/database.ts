@@ -61,6 +61,15 @@ export type LinkedAthleteMark = {
   recorded_at: string;
 }
 
+/** A dated note a coach wrote (or dictated) about one athlete. */
+export type AthleteNote = {
+  id: string;
+  coach_id: string;
+  athlete_name: string;
+  note: string;
+  created_at: string;
+}
+
 /** Row from get_athlete_connections(): who can view a coach's athlete. */
 export type AthleteConnection = {
   link_id: string;
@@ -236,6 +245,12 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      athlete_notes: {
+        Row: AthleteNote;
+        Insert: Omit<AthleteNote, 'id' | 'created_at'>;
+        Update: never;
+        Relationships: [];
+      };
       athlete_splits: {
         Row: AthleteSplit;
         Insert: Omit<AthleteSplit, 'id' | 'created_at'>;
@@ -269,6 +284,10 @@ export type Database = {
       get_athlete_connections: {
         Args: { p_athlete_name: string };
         Returns: AthleteConnection[];
+      };
+      get_linked_athlete_notes: {
+        Args: { p_link_id: string };
+        Returns: { id: string; note: string; created_at: string }[];
       };
     };
     Enums: Record<string, never>;

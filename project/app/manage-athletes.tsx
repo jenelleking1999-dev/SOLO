@@ -95,7 +95,7 @@ function ManageAthletesScreen() {
       .order('recorded_at', { ascending: false });
 
     if (!splits || splits.length === 0) {
-      setAthletes([]);
+      setAthletes(await withNoteOnlyAthletes([]));
       setLoading(false);
       return;
     }
@@ -193,8 +193,33 @@ function ManageAthletesScreen() {
       }))
       .sort((a, b) => b.totalReps - a.totalReps);
 
-    setAthletes(rows);
+    setAthletes(await withNoteOnlyAthletes(rows));
     setLoading(false);
+  };
+
+  /**
+   * Athletes the coach has written notes about but not timed yet still need a
+   * row, so their notes (and invite codes) can be reached.
+   */
+  const withNoteOnlyAthletes = async (rows: AthleteRow[]): Promise<AthleteRow[]> => {
+    if (!user) return rows;
+    const { data } = await supabase.from('athlete_notes').select('athlete_name').eq('coach_id', user.id);
+    const known = new Set(rows.map((r) => r.name.toLowerCase()));
+    const extra: AthleteRow[] = [];
+    (data ?? []).forEach(({ athlete_name }) => {
+      const key = athlete_name.toLowerCase();
+      if (known.has(key)) return;
+      known.add(key);
+      extra.push({
+        name: athlete_name,
+        totalReps: 0,
+        totalSessions: 0,
+        setTimeSuccessRate: null,
+        lastWorkout: null,
+        lastWorkoutName: null,
+      });
+    });
+    return [...rows, ...extra.sort((a, b) => a.name.localeCompare(b.name))];
   };
 
   const formatDate = (iso: string) => {
@@ -228,7 +253,7 @@ function ManageAthletesScreen() {
             <User size={56} color={colors.dark.textTertiary} />
             <Text style={styles.emptyTitle}>No athletes yet</Text>
             <Text style={styles.emptySubtitle}>
-              Athletes appear here after being assigned to splits during a workout session.
+              Athletes appear here after being assigned to splits during a workout session, or after you save a note about them.
             </Text>
           </View>
         )}

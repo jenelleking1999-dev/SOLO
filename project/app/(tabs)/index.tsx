@@ -21,6 +21,7 @@ import {
   Plus,
   Trash2,
   CalendarCheck,
+  NotebookPen,
 } from 'lucide-react-native';
 import { colors, spacing, typography } from '@/constants/theme';
 import { parseWorkoutText, ParsedWorkout } from '@/utils/workoutParser';
@@ -35,6 +36,8 @@ import { ScheduleCalendar } from '@/components/ScheduleCalendar';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { ViewerHome } from '@/components/ViewerHome';
 import { fromDateKey, todayKey, toDateKey, formatShortDate } from '@/utils/calendarDates';
+import { AthleteNoteComposer } from '@/components/AthleteNoteComposer';
+import { getCoachRoster } from '@/lib/athleteNotes';
 
 /**
  * A numeric text field that can be fully cleared while editing. Empty input is
@@ -101,6 +104,21 @@ function CoachHome() {
   const scrollRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
 
+  // The text box (typed or dictated) either describes a workout or is a note
+  // about athletes. Each mode keeps its own text so switching loses nothing.
+  // Notes need an account, so signed-out guests only get workout mode.
+  const [inputMode, setInputMode] = useState<'workout' | 'note'>('workout');
+  const isNoteMode = inputMode === 'note' && !!user;
+  const [noteText, setNoteText] = useState('');
+  const [roster, setRoster] = useState<string[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user) getCoachRoster(user.id).then(setRoster);
+      else setRoster([]);
+    }, [user?.id])
+  );
+
   // Calendar: the visible month, the tapped day, and — while planning — the
   // date the workout in the builder will be saved to (instead of started).
   const [calendarMonth, setCalendarMonth] = useState(() => {
@@ -139,6 +157,7 @@ function CoachHome() {
   };
 
   const handlePlan = (date: string) => {
+    setInputMode('workout');
     setPlanDate(date);
     setStartError(null);
     scrollRef.current?.scrollTo({ y: 0, animated: true });
@@ -167,6 +186,7 @@ function CoachHome() {
   };
 
   const handleLoadScheduled = (item: ScheduledWorkout) => {
+    setInputMode('workout');
     const workout = item.workout as ParsedWorkout;
     setPlanDate(null);
     setWorkoutText(item.workout_text ?? '');
@@ -238,8 +258,12 @@ function CoachHome() {
   };
 
   const handleVoiceTranscriptAccept = (transcript: string) => {
-    setWorkoutText(transcript);
     voiceInput.resetTranscript();
+    if (isNoteMode) {
+      setNoteText((prev) => (prev.trim() ? `${prev.trim()} ${transcript}` : transcript));
+      return;
+    }
+    setWorkoutText(transcript);
     Alert.alert('Workout Added', 'Tap "Generate Workout" to parse your workout description.');
   };
 
@@ -362,7 +386,33 @@ function CoachHome() {
           <Text style={styles.tagline}>Conditioning Starts Here</Text>
         </View>
 
-        {planDate && (
+        {user && (
+          <View style={styles.modeToggle}>
+            {(['workout', 'note'] as const).map((mode) => {
+              const active = inputMode === mode;
+              return (
+                <TouchableOpacity
+                  key={mode}
+                  style={[styles.modeOption, active && styles.modeOptionActive]}
+                  onPress={() => setInputMode(mode)}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: active }}
+                >
+                  {mode === 'workout' ? (
+                    <Sparkles size={16} color={active ? '#ffffff' : colors.dark.textSecondary} />
+                  ) : (
+                    <NotebookPen size={16} color={active ? '#ffffff' : colors.dark.textSecondary} />
+                  )}
+                  <Text style={[styles.modeText, active && styles.modeTextActive]}>
+                    {mode === 'workout' ? 'Workout' : 'Athlete note'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
+        {planDate && !isNoteMode && (
           <View style={styles.planBanner}>
             <CalendarCheck size={18} color={colors.dark.accent} />
             <Text style={styles.planBannerText}>
@@ -382,12 +432,17 @@ function CoachHome() {
           <TextInput
             ref={inputRef}
             style={styles.input}
-            placeholder="Type a workout or use voice..."
+            placeholder={
+              isNoteMode
+                ? 'Say or type a note, e.g. "Alex is performing very well today"'
+                : 'Type a workout or use voice...'
+            }
             placeholderTextColor={colors.dark.textSecondary}
-            value={workoutText}
-            onChangeText={setWorkoutText}
+            value={isNoteMode ? noteText : workoutText}
+            onChangeText={isNoteMode ? setNoteText : setWorkoutText}
             multiline
-            onSubmitEditing={handleParseWorkout}
+            onSubmitEditing={isNoteMode ? undefined : handleParseWorkout}
+            maxLength={isNoteMode ? 2000 : undefined}
           />
           {voiceInput.voiceAvailable && (
             <VoiceInputButton
@@ -408,7 +463,16 @@ function CoachHome() {
           />
         )}
 
-        {workoutText && !parsedWorkout && (
+        {isNoteMode && user && (
+          <AthleteNoteComposer
+            coachId={user.id}
+            noteText={noteText}
+            roster={roster}
+            onSaved={() => setNoteText('')}
+          />
+        )}
+
+        {!isNoteMode && workoutText && !parsedWorkout && (
           <TouchableOpacity style={styles.parseButton} onPress={handleParseWorkout}>
             <LinearGradient
               colors={[colors.dark.primary, colors.dark.secondary]}
@@ -422,7 +486,7 @@ function CoachHome() {
           </TouchableOpacity>
         )}
 
-        {parsedWorkout && !isEditing && (
+        {!isNoteMode && parsedWorkout && !isEditing && (
           <View style={styles.workoutCard}>
             <View style={styles.workoutHeader}>
               <Text style={styles.workoutTitle}>Workout Summary</Text>
@@ -544,7 +608,7 @@ function CoachHome() {
           </View>
         )}
 
-        {parsedWorkout && isEditing && editedWorkout && (
+        {!isNoteMode && parsedWorkout && isEditing && editedWorkout && (
           <View style={styles.workoutCard}>
             <View style={styles.workoutHeader}>
               <Text style={styles.workoutTitle}>Edit Workout</Text>
@@ -980,6 +1044,36 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.lg,
     fontFamily: typography.fontFamily.bold,
     fontWeight: typography.fontWeight.bold,
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.dark.borderLight,
+    padding: 4,
+    marginBottom: spacing.md,
+  },
+  modeOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    borderRadius: 9,
+  },
+  modeOptionActive: {
+    backgroundColor: colors.dark.primary,
+  },
+  modeText: {
+    fontSize: typography.fontSize.sm,
+    fontFamily: typography.fontFamily.semibold,
+    fontWeight: typography.fontWeight.semibold,
+    color: colors.dark.textSecondary,
+  },
+  modeTextActive: {
+    color: '#ffffff',
   },
   planBanner: {
     flexDirection: 'row',

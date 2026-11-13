@@ -25,6 +25,7 @@ import { formatTime, calculateAverage } from '@/utils/workoutParser';
 import { AthleteSplit, WorkoutSegment } from '@/types/database';
 import { getLinkedAthleteHistory } from '@/lib/athleteAccess';
 import { AthleteAccessCard } from '@/components/AthleteAccessCard';
+import { AthleteNotesList } from '@/components/AthleteNotesList';
 import { exportAllWorkoutsToExcel, downloadExcelFile } from '@/utils/excelExport';
 import { ENABLE_DOWNLOAD } from '@/constants/features';
 
@@ -300,6 +301,8 @@ function AthleteHistoryScreen() {
             </Text>
           </View>
         )}
+
+        {athleteName ? <AthleteNotesList athleteName={athleteName} linkId={linkId} /> : null}
 
         {!isViewer && isCoach && athleteName ? <AthleteAccessCard athleteName={athleteName} /> : null}
 
